@@ -65,28 +65,80 @@ class AlloyDBConnection:
                 logger.info(f"User: {settings.ALLOYDB_USER}")
 
                 # Get credentials for IAM authentication
+                logger.debug("Loading service account credentials...")
                 credentials = self._get_credentials()
+                logger.debug(f"Credentials loaded. Service account: {credentials.service_account_email if hasattr(credentials, 'service_account_email') else 'N/A'}")
 
-                # Initialize the Cloud SQL Python Connector with IAM auth
+                # Initialize the AlloyDB Connector with IAM auth
+                logger.debug("Initializing AlloyDB Connector...")
                 self.connector = Connector(credentials=credentials)
+                logger.debug("Connector initialized successfully")
 
-                # Test connection
-                conn = self.connector.connect(
-                    self._get_instance_uri(),
-                    "pg8000",
-                    user=settings.ALLOYDB_USER,
-                    db=settings.ALLOYDB_DATABASE,
-                    enable_iam_auth=True,
-                )
+                instance_uri = self._get_instance_uri()
+                logger.debug(f"Connecting to instance URI: {instance_uri}")
+                logger.debug(f"Connection parameters: driver=pg8000, user={settings.ALLOYDB_USER}, db={settings.ALLOYDB_DATABASE}, enable_iam_auth=True, timeout=5s")
+
+                # Test connection with 5 second timeout
+                import socket
+                original_timeout = socket.getdefaulttimeout()
+                socket.setdefaulttimeout(5.0)
+
+                try:
+                    conn = self.connector.connect(
+                        instance_uri,
+                        "pg8000",
+                        user=settings.ALLOYDB_USER,
+                        db=settings.ALLOYDB_DATABASE,
+                        enable_iam_auth=True,
+                        timeout=5,
+                    )
+                    logger.debug("Connection object created successfully")
+                finally:
+                    socket.setdefaulttimeout(original_timeout)
 
                 # Close test connection
+                logger.debug("Closing test connection...")
                 conn.close()
+                logger.debug("Test connection closed")
 
                 logger.info("Successfully connected to AlloyDB using IAM authentication")
                 return
 
+            except socket.timeout as e:
+                logger.error(f"Connection timeout after 5 seconds (attempt {attempt + 1})")
+                logger.error(f"Timeout error details: {type(e).__name__}: {str(e)}")
+                logger.error("Possible causes: VPN issues, firewall blocking connection, incorrect instance URI, network latency")
+
+                if attempt < settings.MAX_RETRIES - 1:
+                    wait_time = 2 ** attempt
+                    logger.info(f"Retrying in {wait_time} seconds...")
+                    time.sleep(wait_time)
+                else:
+                    raise ConnectionError(
+                        f"Failed to connect to AlloyDB after {settings.MAX_RETRIES} attempts: Connection timeout after 5 seconds. "
+                        f"Check VPN connection, firewall rules, and instance URI: {self._get_instance_uri()}"
+                    )
+
             except Exception as e:
                 logger.error(f"Connection attempt {attempt + 1} failed: {str(e)}")
+                logger.error(f"Error type: {type(e).__name__}")
+                logger.error(f"Error details: {repr(e)}")
+
+                # Log additional context for specific error types
+                if "authentication" in str(e).lower() or "permission" in str(e).lower():
+                    logger.error("Authentication error detected. Check:")
+                    logger.error("  1. Service account has 'roles/alloydb.client' IAM role")
+                    logger.error("  2. IAM database user exists in AlloyDB")
+                    logger.error("  3. Database user has necessary privileges")
+                elif "not found" in str(e).lower() or "does not exist" in str(e).lower():
+                    logger.error("Resource not found error. Verify:")
+                    logger.error(f"  Instance URI: {self._get_instance_uri()}")
+                    logger.error("  Instance exists and is in READY state")
+                    logger.error("  Region, cluster, and instance names are correct")
+                elif "api" in str(e).lower():
+                    logger.error("API error detected. Ensure:")
+                    logger.error("  AlloyDB API is enabled in project")
+                    logger.error("  Service account has proper API access")
 
                 if attempt < settings.MAX_RETRIES - 1:
                     # Exponential backoff: 2^attempt seconds
@@ -109,16 +161,31 @@ class AlloyDBConnection:
             raise RuntimeError("Connector not initialized. Call connect_with_retry() first.")
 
         try:
-            conn = self.connector.connect(
-                self._get_instance_uri(),
-                "pg8000",
-                user=settings.ALLOYDB_USER,
-                db=settings.ALLOYDB_DATABASE,
-                enable_iam_auth=True,
-            )
-            return conn
+            import socket
+            original_timeout = socket.getdefaulttimeout()
+            socket.setdefaulttimeout(5.0)
+
+            try:
+                logger.debug(f"Getting new connection to {self._get_instance_uri()}")
+                conn = self.connector.connect(
+                    self._get_instance_uri(),
+                    "pg8000",
+                    user=settings.ALLOYDB_USER,
+                    db=settings.ALLOYDB_DATABASE,
+                    enable_iam_auth=True,
+                    timeout=5,
+                )
+                logger.debug("Connection obtained successfully")
+                return conn
+            finally:
+                socket.setdefaulttimeout(original_timeout)
+
+        except socket.timeout as e:
+            logger.error(f"Connection timeout after 5 seconds: {str(e)}")
+            raise ConnectionError(f"Connection timeout after 5 seconds. Check VPN and network connectivity.")
         except Exception as e:
             logger.error(f"Failed to get connection: {str(e)}")
+            logger.error(f"Error type: {type(e).__name__}")
             raise
 
     def return_connection(self, conn):

@@ -242,9 +242,9 @@ class RecipeChatbot:
 
 def main():
     """Main entry point for the chatbot."""
-    # Set up logging
+    # Set up logging with DEBUG level for verbose connection debugging
     logging.basicConfig(
-        level=logging.INFO,
+        level=logging.DEBUG,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
             logging.FileHandler('chatbot.log'),
