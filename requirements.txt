@@ -1,0 +1,15 @@
+# Google Cloud dependencies
+google-cloud-aiplatform>=1.38.0
+google-cloud-alloydb-connector>=1.0.0
+cloud-sql-python-connector[pg8000]>=1.5.0
+google-auth>=2.23.0
+google-auth-oauthlib>=1.1.0
+
+# Database
+pg8000>=1.30.0
+
+# Configuration
+python-dotenv>=1.0.0
+
+# Utilities
+typing-extensions>=4.8.0
