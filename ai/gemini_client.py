@@ -206,36 +206,26 @@ Now extract filters for the user query above.
         vague_terms = ["something", "anything", "good", "nice", "tasty", "yummy", "delicious"]
         query_lower = query.lower()
 
-        # Check if query contains "recipe" or "recipes" without meal type specification
-        meal_types = ["breakfast", "lunch", "dinner", "snack", "appetizer", "main", "dessert", "sweet", "drink", "beverage", "soup", "salad", "side"]
-        has_recipe_word = "recipe" in query_lower or "recipes" in query_lower
-        has_meal_type = any(meal_type in query_lower for meal_type in meal_types)
-
-        # Check for dietary restrictions that might clarify intent
-        dietary_indicators = ["vegetarian", "vegan", "gluten", "protein", "low fat", "low carb"]
-        has_dietary = any(indicator in query_lower for indicator in dietary_indicators)
-
-        # If query has "recipe(s)" but no meal type and only dietary tags, ask for clarification
-        if has_recipe_word and not has_meal_type and has_dietary:
-            return "What type of dish are you looking for? (main dishes, soups, salads, side dishes, desserts, drinks)"
-
         # Check for vague terms without specifics
         has_vague_term = any(term in query_lower for term in vague_terms)
         has_specific_constraint = any(
             term in query_lower
-            for term in ["vegetarian", "vegan", "minutes", "quick", "easy", "breakfast", "lunch", "dinner"]
+            for term in ["vegetarian", "vegan", "minutes", "quick", "easy", "breakfast", "lunch", "dinner",
+                        "chicken", "beef", "pork", "fish", "lamb", "protein", "low fat", "low carb", "gluten"]
         )
 
         if has_vague_term and not has_specific_constraint:
-            return "What type of dish are you looking for? (main dishes, soups, salads, desserts, drinks)"
+            return "What type of dish are you looking for? For example: 'easy vegetarian pasta' or 'quick chicken recipes'"
 
-        # Check for "quick" without time specification
+        # Check for "quick" without time specification and no other constraints
         if "quick" in query_lower and ("minute" not in query_lower and "hour" not in query_lower):
-            return "How much time do you have? (under 15 min, 15-30 min, 30-60 min)"
+            # Only ask for time if there are no other constraints
+            if not has_specific_constraint:
+                return "How much time do you have? (under 15 min, 15-30 min, 30-60 min)"
 
-        # Very short queries
-        if len(query.split()) <= 2 and not has_specific_constraint:
-            return "Could you be more specific? For example: 'easy vegetarian pasta under 30 minutes'"
+        # Very short queries (1-2 words) without specific constraints
+        if len(query.split()) <= 2 and not has_specific_constraint and "recipe" not in query_lower:
+            return "Could you be more specific? For example: 'easy vegetarian pasta' or 'quick chicken recipes'"
 
         return None
 

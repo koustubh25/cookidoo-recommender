@@ -213,15 +213,20 @@ Not applicable - new feature with no existing functionality to preserve.
 - Prevents wasted API calls on unclear queries
 
 **Implementation Strategy**:
-1. Detect ambiguity signals (vague terms like "something good", missing constraints)
-2. Ask specific follow-up questions (e.g., "What type of meal? breakfast/lunch/dinner?")
+1. Detect ambiguity signals (vague terms like "something good" without any constraints)
+2. Ask specific follow-up questions only when there are NO specific constraints
 3. Provide example queries to guide users
-4. Allow users to proceed with broad search if they prefer
+4. Do NOT ask for clarification when user provides dietary restrictions, proteins, or time constraints (we have sensible defaults)
 
-**Examples**:
-- Query: "something tasty" → Ask: "What type of dish are you looking for? (appetizer, main course, dessert, drink)"
-- Query: "quick recipe" → Ask: "How much time do you have? (under 15 min, 15-30 min, 30-60 min)"
-- Query: "healthy meal" → Ask: "Any dietary preferences? (vegetarian, vegan, low-carb, gluten-free)"
+**Examples of Ambiguous Queries** (ask for clarification):
+- Query: "something tasty" → Ask: "What type of dish are you looking for? For example: 'easy vegetarian pasta' or 'quick chicken recipes'"
+- Query: "good" → Ask: "Could you be more specific? For example: 'easy vegetarian pasta' or 'quick chicken recipes'"
+
+**Examples of Clear Queries** (do NOT ask for clarification):
+- Query: "vegetarian recipes" → Proceed with default meal categories (mains, soups, salads)
+- Query: "chicken recipes" → Proceed with protein filter + default meal categories
+- Query: "quick recipes" → Proceed with default meal categories (user has "quick" constraint)
+- Query: "healthy meal" → Proceed if dietary/nutritional constraints can be inferred
 
 ### Decision 8: Result Presentation
 **What**: Display recipe name and thumbnail as clickable elements that open the Cookidoo URL
