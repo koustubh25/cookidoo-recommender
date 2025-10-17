@@ -49,13 +49,25 @@ The system SHALL extract structured filters from natural language queries using 
 - **WHEN** user queries "high protein recipes" or "low fat meals"
 - **THEN** system excludes dessert/cake tags to focus on savory dishes
 
-#### Scenario: Apply nutritional filters
+#### Scenario: Apply nutritional filters per serving
 - **WHEN** high_protein filter is true
-- **THEN** system filters for recipes with >20g protein per serving
+- **THEN** system filters for recipes with >20g protein per serving (calculated as total_protein / servings)
 
-#### Scenario: Apply low fat filter
+#### Scenario: Apply low fat filter per serving
 - **WHEN** low_fat filter is true
-- **THEN** system filters for recipes with <10g fat per serving
+- **THEN** system filters for recipes with <10g fat per serving (calculated as total_fat / servings)
+
+#### Scenario: Apply low carb filter per serving
+- **WHEN** low_carb filter is true
+- **THEN** system filters for recipes with <30g carbs per serving (calculated as total_carbs / servings)
+
+#### Scenario: Apply low calorie filter per serving
+- **WHEN** low_calorie filter is true
+- **THEN** system filters for recipes with <300 kcal per serving (calculated as total_calories / servings)
+
+#### Scenario: Display per-serving nutrition
+- **WHEN** returning recipe results
+- **THEN** system displays nutrition values calculated per serving in format: "Nutrition (per serving, X servings): Y kcal, Zg protein, Ag carbs, Bg fat"
 
 ### Requirement: Hybrid Search
 The system SHALL combine NL2SQL filtering with vector similarity search to retrieve relevant recipes.

@@ -43,6 +43,40 @@ class ChatSession:
         """Get results from the most recent query."""
         return self.result_history[-1] if self.result_history else None
 
+    def get_context_for_query(self, current_query: str) -> Optional[str]:
+        """
+        Get context from previous query if current query is a refinement.
+
+        Args:
+            current_query: The current user query
+
+        Returns:
+            Context from previous query or None
+        """
+        if not self.query_history:
+            return None
+
+        last_query = self.get_last_query()
+        current_lower = current_query.lower()
+
+        # Detect refinement keywords
+        refinement_keywords = [
+            "under", "less than", "more than", "faster", "quicker",
+            "easier", "harder", "with", "without", "also", "but"
+        ]
+
+        # Check if current query is a refinement (short and contains constraint words)
+        is_refinement = (
+            len(current_query.split()) <= 6 and
+            any(keyword in current_lower for keyword in refinement_keywords)
+        )
+
+        if is_refinement:
+            logger.info(f"Detected refinement query. Previous: '{last_query}' Current: '{current_query}'")
+            return last_query
+
+        return None
+
     def get_query_by_index(self, index: int) -> Optional[str]:
         """
         Get query by index (1-based, where 1 is oldest).

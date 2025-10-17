@@ -95,7 +95,8 @@ Extract the following filters if present:
 IMPORTANT RULES:
 1. If the query mentions "dessert", "cake", "sweet", or "pastry", DO NOT set high_protein=true or low_fat=true
 2. If the query mentions nutritional requirements (protein, low fat), exclude dessert-related tags
-3. Vegetarian queries should focus on savory dishes unless dessert is explicitly mentioned
+3. For vegetarian/vegan queries WITHOUT "dessert" or "sweet" mentioned, add tags for savory dishes: ["main dishes", "soups", "salads", "side dishes"]
+4. Only include "desserts" tag if the query explicitly mentions desserts, sweets, cakes, or pastries
 
 Return your answer as a JSON object. If a filter is not mentioned, omit it from the response.
 Only return the JSON, no other text.
@@ -106,27 +107,35 @@ Response: {{"dietary_tags": ["vegetarian"], "tags": ["dinner", "main dishes"], "
 
 Example 2:
 Query: "quick vegetarian recipes, high protein and low fat"
-Response: {{"dietary_tags": ["vegetarian"], "max_time": 30, "high_protein": true, "low_fat": true}}
+Response: {{"dietary_tags": ["vegetarian"], "tags": ["main dishes", "soups", "salads"], "max_time": 30, "high_protein": true, "low_fat": true}}
 
 Example 3:
+Query: "give me a vegetarian recipe"
+Response: {{"dietary_tags": ["vegetarian"], "tags": ["main dishes", "soups", "salads", "side dishes"]}}
+
+Example 4:
+Query: "vegetarian desserts"
+Response: {{"dietary_tags": ["vegetarian"], "tags": ["desserts"]}}
+
+Example 5:
 Query: "gluten free nut free desserts"
 Response: {{"dietary_tags": ["gluten free", "nut free"], "tags": ["desserts"]}}
 
-Example 4:
+Example 6:
 Query: "chicken curry"
 Response: {{"recipe_name": "chicken curry"}}
 
-Example 5:
+Example 7:
 Query: "chocolate cake"
 Response: {{"recipe_name": "chocolate cake", "tags": ["desserts"]}}
 
-Example 6:
+Example 8:
 Query: "5 easy breakfast recipes"
 Response: {{"tags": ["breakfast"], "difficulty": ["easy"], "result_limit": 5}}
 
-Example 7:
+Example 9:
 Query: "vegan low carb meals"
-Response: {{"dietary_tags": ["vegan"], "tags": ["low carb", "main dishes"]}}
+Response: {{"dietary_tags": ["vegan"], "tags": ["low carb", "main dishes", "soups", "salads"]}}
 
 Now extract filters for the user query above.
 """
@@ -173,6 +182,19 @@ Now extract filters for the user query above.
         vague_terms = ["something", "anything", "good", "nice", "tasty", "yummy", "delicious"]
         query_lower = query.lower()
 
+        # Check if query contains "recipe" or "recipes" without meal type specification
+        meal_types = ["breakfast", "lunch", "dinner", "snack", "appetizer", "main", "dessert", "sweet", "drink", "beverage", "soup", "salad", "side"]
+        has_recipe_word = "recipe" in query_lower or "recipes" in query_lower
+        has_meal_type = any(meal_type in query_lower for meal_type in meal_types)
+
+        # Check for dietary restrictions that might clarify intent
+        dietary_indicators = ["vegetarian", "vegan", "gluten", "protein", "low fat", "low carb"]
+        has_dietary = any(indicator in query_lower for indicator in dietary_indicators)
+
+        # If query has "recipe(s)" but no meal type and only dietary tags, ask for clarification
+        if has_recipe_word and not has_meal_type and has_dietary:
+            return "What type of dish are you looking for? (main dishes, soups, salads, side dishes, desserts, drinks)"
+
         # Check for vague terms without specifics
         has_vague_term = any(term in query_lower for term in vague_terms)
         has_specific_constraint = any(
@@ -181,7 +203,7 @@ Now extract filters for the user query above.
         )
 
         if has_vague_term and not has_specific_constraint:
-            return "What type of dish are you looking for? (appetizer, main course, dessert, drink)"
+            return "What type of dish are you looking for? (main dishes, soups, salads, desserts, drinks)"
 
         # Check for "quick" without time specification
         if "quick" in query_lower and ("minute" not in query_lower and "hour" not in query_lower):

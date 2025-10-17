@@ -119,6 +119,26 @@ WHERE rtv.version = 'TM6'
 
 **Default Result Limit**: System returns 2 results by default unless explicitly specified in the query (e.g., "5 recipes", "10 results"). This prevents information overload and encourages focused recommendations.
 
+### Decision 13: Nutritional Calculations Per Serving
+**What**: All nutritional filters and displays calculate values per serving by dividing total nutrition by number of servings
+
+**Why**:
+- Database stores total nutrition for entire recipe (all servings)
+- Users think in terms of per-serving nutrition when evaluating healthy options
+- Filtering by total values would be misleading (a recipe for 8 servings would show 8x the nutrition)
+- Standard practice in recipe/nutrition apps to show per-serving values
+
+**Implementation**:
+- Filters: `(nutrition_protein_g / NULLIF(servings, 0)) > 20` for high protein
+- Display: "Nutrition (per serving, 4 servings): 350 kcal, 25.5g protein, 40.2g carbs, 8.3g fat"
+- Use NULLIF to avoid division by zero errors
+
+**Thresholds (per serving)**:
+- High protein: > 20g
+- Low fat: < 10g
+- Low carb: < 30g
+- Low calorie: < 300 kcal
+
 ## Risks / Trade-offs
 
 ### Risk 1: VPN Connection Issues

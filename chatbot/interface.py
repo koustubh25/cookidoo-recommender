@@ -135,26 +135,37 @@ class RecipeChatbot:
         Args:
             query: User query string
         """
-        # Check for ambiguity
-        clarification = self.ai_client.detect_ambiguity(query)
-        if clarification:
-            print(f"\nBot: {clarification}")
-            print("\nOr type your query again to proceed with a broad search.")
-            return
+        # Check if this is a refinement of the previous query
+        context = self.session.get_context_for_query(query)
+        enhanced_query = query
+
+        if context:
+            # Combine previous query with current refinement
+            enhanced_query = f"{context} {query}"
+            print(f"\nBot: I'll refine your previous search for '{context}'...")
+            print(f"     Adding constraint: '{query}'")
+        else:
+            # Check for ambiguity only for new queries
+            clarification = self.ai_client.detect_ambiguity(query)
+            if clarification:
+                print(f"\nBot: {clarification}")
+                print("\nOr type your query again to proceed with a broad search.")
+                return
 
         print("\nBot: Searching for recipes...")
 
         try:
-            # Get recommendations
-            results = self.engine.recommend(query)
+            # Get recommendations with enhanced query
+            results = self.engine.recommend(enhanced_query)
 
             if not results:
                 print("\n✗ No recipes found matching your criteria.")
                 print("Try broadening your search or using different keywords.")
                 return
 
-            # Store in session
-            self.session.add_query(query, results)
+            # Store the enhanced query in session so further refinements build on it
+            # If this was a refinement, store the combined query; otherwise store original
+            self.session.add_query(enhanced_query if context else query, results)
 
             # Display results
             print(f"\nFound {len(results)} recipes:\n")
@@ -196,6 +207,27 @@ class RecipeChatbot:
         difficulty = recipe.get('difficulty')
         if difficulty:
             print(f"    Difficulty: {difficulty}")
+
+        # Display per-serving nutrition if available
+        servings = recipe.get('servings')
+        calories_per_serving = recipe.get('calories_per_serving')
+        protein_per_serving = recipe.get('protein_per_serving')
+        carbs_per_serving = recipe.get('carbs_per_serving')
+        fat_per_serving = recipe.get('fat_per_serving')
+
+        if servings and any([calories_per_serving, protein_per_serving, carbs_per_serving, fat_per_serving]):
+            nutrition_parts = []
+            if calories_per_serving:
+                nutrition_parts.append(f"{calories_per_serving:.0f} kcal")
+            if protein_per_serving:
+                nutrition_parts.append(f"{protein_per_serving:.1f}g protein")
+            if carbs_per_serving:
+                nutrition_parts.append(f"{carbs_per_serving:.1f}g carbs")
+            if fat_per_serving:
+                nutrition_parts.append(f"{fat_per_serving:.1f}g fat")
+
+            if nutrition_parts:
+                print(f"    Nutrition (per serving, {servings} servings): {', '.join(nutrition_parts)}")
 
     def _find_similar(self, index: int) -> None:
         """

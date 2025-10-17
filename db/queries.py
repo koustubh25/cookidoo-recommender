@@ -104,26 +104,31 @@ class RecipeQueries:
                 """)
                 params.append(f"%{ingredient}%")
 
-        # Nutritional filters
+        # Nutritional filters (calculated per serving)
+        # Note: Database stores total nutrition for all servings, so we divide by servings
         if "high_protein" in filters and filters["high_protein"]:
             # High protein: > 20g per serving
-            conditions.append("r.nutrition_protein_g > %s")
+            conditions.append("(r.nutrition_protein_g / NULLIF(r.servings, 0)) > %s")
             params.append(20)
+            logger.info(f"  Added high protein filter: > 20g per serving")
 
         if "low_fat" in filters and filters["low_fat"]:
             # Low fat: < 10g per serving
-            conditions.append("r.nutrition_fat_g < %s")
+            conditions.append("(r.nutrition_fat_g / NULLIF(r.servings, 0)) < %s")
             params.append(10)
+            logger.info(f"  Added low fat filter: < 10g per serving")
 
         if "low_carb" in filters and filters["low_carb"]:
             # Low carb: < 30g per serving
-            conditions.append("r.nutrition_carbs_g < %s")
+            conditions.append("(r.nutrition_carbs_g / NULLIF(r.servings, 0)) < %s")
             params.append(30)
+            logger.info(f"  Added low carb filter: < 30g per serving")
 
         if "low_calorie" in filters and filters["low_calorie"]:
             # Low calorie: < 300 kcal per serving
-            conditions.append("r.nutrition_calories_kcal < %s")
+            conditions.append("(r.nutrition_calories_kcal / NULLIF(r.servings, 0)) < %s")
             params.append(300)
+            logger.info(f"  Added low calorie filter: < 300 kcal per serving")
 
         where_clause = " AND ".join(conditions) if conditions else "1=1"
 
@@ -178,6 +183,11 @@ class RecipeQueries:
                 r.nutrition_protein_g,
                 r.nutrition_carbs_g,
                 r.nutrition_fat_g,
+                -- Calculate per-serving nutrition
+                (r.nutrition_calories_kcal / NULLIF(r.servings, 0)) AS calories_per_serving,
+                (r.nutrition_protein_g / NULLIF(r.servings, 0)) AS protein_per_serving,
+                (r.nutrition_carbs_g / NULLIF(r.servings, 0)) AS carbs_per_serving,
+                (r.nutrition_fat_g / NULLIF(r.servings, 0)) AS fat_per_serving,
                 r.rating,
                 r.rating_count,
                 r.image_url,
