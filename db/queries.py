@@ -29,27 +29,37 @@ class RecipeQueries:
         conditions.append("rtv.version = %s")
         params.append(settings.THERMOMIX_VERSION)
 
-        # Dietary tags filter
+        # Dietary tags filter (case-insensitive)
         if "dietary_tags" in filters and filters["dietary_tags"]:
-            dietary_placeholders = ", ".join(["%s"] * len(filters["dietary_tags"]))
+            # Use ILIKE for case-insensitive matching
+            dietary_conditions = []
+            for dietary_tag in filters["dietary_tags"]:
+                dietary_conditions.append("dietary_tag ILIKE %s")
+                params.append(f"%{dietary_tag}%")
+
+            dietary_clause = " OR ".join(dietary_conditions)
             conditions.append(f"""
                 r.recipe_id IN (
                     SELECT recipe_id FROM recipe_dietary_tags
-                    WHERE dietary_tag IN ({dietary_placeholders})
+                    WHERE {dietary_clause}
                 )
             """)
-            params.extend(filters["dietary_tags"])
 
-        # Tags filter (meal type, etc.)
+        # Tags filter (meal type, etc.) - case-insensitive
         if "tags" in filters and filters["tags"]:
-            tag_placeholders = ", ".join(["%s"] * len(filters["tags"]))
+            # Use ILIKE for case-insensitive matching
+            tag_conditions = []
+            for tag in filters["tags"]:
+                tag_conditions.append("tag ILIKE %s")
+                params.append(f"%{tag}%")
+
+            tag_clause = " OR ".join(tag_conditions)
             conditions.append(f"""
                 r.recipe_id IN (
                     SELECT recipe_id FROM recipe_tags
-                    WHERE tag IN ({tag_placeholders})
+                    WHERE {tag_clause}
                 )
             """)
-            params.extend(filters["tags"])
 
         # Time constraints
         if "max_time" in filters:
