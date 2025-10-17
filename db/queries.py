@@ -108,10 +108,20 @@ class RecipeQueries:
             conditions.append(f"r.difficulty IN ({difficulty_placeholders})")
             params.extend(filters["difficulty"])
 
-        # Recipe name search (ILIKE pattern matching)
+        # Recipe name search (ILIKE pattern matching in title OR tags)
         if "recipe_name" in filters and filters["recipe_name"]:
-            conditions.append("r.title ILIKE %s")
-            params.append(f"%{filters['recipe_name']}%")
+            logger.info(f"Processing recipe_name filter: {filters['recipe_name']}")
+            pattern = f"%{filters['recipe_name']}%"
+            # Search in both title and tags for maximum coverage
+            conditions.append("""
+                (r.title ILIKE %s OR r.recipe_id IN (
+                    SELECT recipe_id FROM recipe_tags
+                    WHERE tag ILIKE %s
+                ))
+            """)
+            params.append(pattern)
+            params.append(pattern)
+            logger.info(f"  Added recipe_name pattern (title OR tags): {pattern}")
 
         # Main protein filter - match in title or tags, NOT just ingredients
         if "main_protein" in filters and filters["main_protein"]:

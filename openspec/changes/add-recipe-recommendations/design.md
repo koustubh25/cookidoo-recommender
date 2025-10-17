@@ -271,19 +271,26 @@ Not applicable - new feature with no existing functionality to preserve.
 - Phase 2: Optimize hot paths (target < 5s)
 - Phase 3: Advanced caching and indexing (target < 2s)
 
-### Decision 11: Recipe Name Search
-**What**: Include recipe names in searchable text for both SQL filtering and vector search
+### Decision 11: Recipe Name and Dish Type Search
+**What**: Search for recipe names and dish types in both recipe titles AND tags
 
 **Why**:
-- Users often search by partial recipe names they remember
+- Users often search by dish types (pasta, pizza, curry, rice, etc.)
+- Dish types can appear in either title or tags (e.g., "pasta" tag for pasta dishes)
 - Recipe titles contain important keywords (cuisine, dish type, ingredients)
-- Improves recall when users have specific recipes in mind
-- Already included in existing embedding text (Title field)
+- Searching only title would miss recipes tagged with the dish type
+- Improves recall for dish-based queries
 
 **Implementation**:
-- SQL: Add ILIKE pattern matching on recipe title field for name-based filtering
-- Vector: Recipe names already embedded in existing vectors (confirmed in embedding generation code)
-- Support queries like "chicken curry" to find recipes with those words in title
+- SQL: ILIKE pattern matching on BOTH recipe title AND recipe_tags
+- Query like "pasta recipes" searches: `WHERE (title ILIKE '%pasta%' OR recipe_id IN (SELECT recipe_id FROM recipe_tags WHERE tag ILIKE '%pasta%'))`
+- For dish type queries, do NOT add default meal category tags (to avoid over-constraining)
+- Vector: Recipe names already embedded in existing vectors
+
+**Examples**:
+- "pasta recipes" → `{recipe_name: "pasta"}` (no meal category tags, searches title OR tags)
+- "chicken curry" → `{recipe_name: "chicken curry", main_protein: "chicken", ...}`
+- "easy italian pasta" → `{cuisine: ["italian"], recipe_name: "pasta", difficulty: ["easy"]}`
 
 ### Decision 14: Main Protein Filtering
 **What**: When users search for protein-based recipes (chicken, beef, etc.), match by recipe title/tags, NOT ingredients

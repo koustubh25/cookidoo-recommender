@@ -103,6 +103,7 @@ IMPORTANT RULES:
 6. For vegetarian/vegan queries without explicit category, include mains, soups, and salads
 7. When a main protein is mentioned (e.g., "chicken"), set main_protein and exclude_tags for other proteins (e.g., exclude_tags: ["beef", "pork", "lamb", "fish"])
 8. main_protein should match recipe title or tags, NOT just ingredients (to avoid matching "chicken stock paste" in beef recipes)
+9. When user searches for dish types like "pasta", "rice", "pizza", "curry", etc., set recipe_name AND do NOT add default meal category tags (let it match flexibly)
 
 Return your answer as a JSON object. If a filter is not mentioned, omit it from the response.
 Only return the JSON, no other text.
@@ -134,6 +135,10 @@ Response: {{"tags": ["mains", "soups", "salads"], "result_limit": 2}}
 Example 6:
 Query: "chicken curry"
 Response: {{"recipe_name": "chicken curry", "main_protein": "chicken", "exclude_tags": ["beef", "pork", "lamb", "fish"]}}
+
+Example 6a:
+Query: "pasta recipes"
+Response: {{"recipe_name": "pasta"}}
 
 Example 7:
 Query: "chocolate cake"
