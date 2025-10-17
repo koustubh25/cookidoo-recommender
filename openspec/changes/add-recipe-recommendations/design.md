@@ -117,6 +117,8 @@ WHERE rtv.version = 'TM6'
 - Rating count reduces noise from single-review recipes
 - Weights can be tuned based on user feedback
 
+**Default Result Limit**: System returns 2 results by default unless explicitly specified in the query (e.g., "5 recipes", "10 results"). This prevents information overload and encourages focused recommendations.
+
 ## Risks / Trade-offs
 
 ### Risk 1: VPN Connection Issues

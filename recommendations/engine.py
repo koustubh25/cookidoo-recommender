@@ -50,6 +50,11 @@ class RecommendationEngine:
                 logger.warning(f"Filter extraction failed, falling back to pure vector search: {str(e)}")
                 filters = {}
 
+        # Extract result limit from filters if present
+        extracted_limit = filters.pop("result_limit", None) if filters else None
+        final_limit = limit or extracted_limit or settings.RESULT_LIMIT
+        logger.info(f"Using result limit: {final_limit}")
+
         # Generate query embedding
         try:
             embedding = self.ai_client.generate_embedding(query)
@@ -62,7 +67,7 @@ class RecommendationEngine:
             results = self.queries.vector_similarity_search(
                 embedding=embedding,
                 filters=filters if filters else None,
-                limit=limit if limit else settings.RESULT_LIMIT
+                limit=final_limit
             )
         except Exception as e:
             logger.error(f"Vector search failed: {str(e)}")

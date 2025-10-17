@@ -41,6 +41,22 @@ The system SHALL extract structured filters from natural language queries using 
 - **WHEN** user provides partial recipe name
 - **THEN** system returns recipes with titles containing the provided keywords
 
+#### Scenario: Extract nutritional requirements
+- **WHEN** user queries "high protein vegetarian recipes"
+- **THEN** system extracts high_protein=true and dietary_tags=["vegetarian"]
+
+#### Scenario: Filter desserts from nutritional queries
+- **WHEN** user queries "high protein recipes" or "low fat meals"
+- **THEN** system excludes dessert/cake tags to focus on savory dishes
+
+#### Scenario: Apply nutritional filters
+- **WHEN** high_protein filter is true
+- **THEN** system filters for recipes with >20g protein per serving
+
+#### Scenario: Apply low fat filter
+- **WHEN** low_fat filter is true
+- **THEN** system filters for recipes with <10g fat per serving
+
 ### Requirement: Hybrid Search
 The system SHALL combine NL2SQL filtering with vector similarity search to retrieve relevant recipes.
 
@@ -76,7 +92,15 @@ The system SHALL rank search results using a weighted combination of similarity,
 
 #### Scenario: Limit result count
 - **WHEN** returning recommendations
-- **THEN** system returns top 10 ranked results by default
+- **THEN** system returns top 2 ranked results by default
+
+#### Scenario: Extract result count from query
+- **WHEN** user specifies number in query (e.g., "5 recipes", "10 results")
+- **THEN** system extracts and uses that number instead of the default
+
+#### Scenario: Prevent duplicate results
+- **WHEN** recipes have multiple version entries in database
+- **THEN** system uses DISTINCT ON to return each recipe only once
 
 ### Requirement: Database Connectivity
 The system SHALL connect to Google Cloud AlloyDB using IAM authentication with service account credentials.
@@ -200,8 +224,8 @@ The system SHALL handle errors gracefully and provide actionable feedback.
 The system SHALL support configurable parameters for search and ranking.
 
 #### Scenario: Configure result limit
-- **WHEN** user wants more than 10 results
-- **THEN** system accepts configurable limit parameter (max 50)
+- **WHEN** user wants more than 2 results
+- **THEN** system extracts limit from query or accepts configurable limit parameter (max 50)
 
 #### Scenario: Configure ranking weights
 - **WHEN** system is initialized

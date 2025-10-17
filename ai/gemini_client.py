@@ -80,12 +80,22 @@ User query: "{query}"
 
 Extract the following filters if present:
 - dietary_tags: List of dietary restrictions (vegetarian, vegan, gluten-free, dairy-free, etc.)
-- tags: List of meal types or categories (breakfast, lunch, dinner, snack, appetizer, dessert, drink, etc.)
+- tags: List of meal types or categories (breakfast, lunch, dinner, snack, appetizer, main, soup, salad, side)
 - max_time: Maximum cooking time in minutes (if query mentions "under X minutes" or "quick")
 - min_time: Minimum cooking time in minutes
 - difficulty: List of difficulty levels (easy, medium, hard)
 - recipe_name: Specific recipe name keywords if mentioned
 - ingredients: List of specific ingredients mentioned
+- high_protein: true if query mentions high protein or protein-rich (exclude if desserts or cakes mentioned)
+- low_fat: true if query mentions low fat or reduced fat (exclude if desserts or cakes mentioned)
+- low_carb: true if query mentions low carb or keto
+- low_calorie: true if query mentions low calorie or light
+- result_limit: number if query specifies how many results (e.g., "5 recipes", "10 results")
+
+IMPORTANT RULES:
+1. If the query mentions "dessert", "cake", "sweet", or "pastry", DO NOT set high_protein=true or low_fat=true
+2. If the query mentions nutritional requirements (protein, low fat), exclude dessert-related tags
+3. Vegetarian queries should focus on savory dishes unless dessert is explicitly mentioned
 
 Return your answer as a JSON object. If a filter is not mentioned, omit it from the response.
 Only return the JSON, no other text.
@@ -95,12 +105,20 @@ Query: "easy vegetarian dinner under 30 minutes"
 Response: {{"dietary_tags": ["vegetarian"], "tags": ["dinner"], "max_time": 30, "difficulty": ["easy"]}}
 
 Example 2:
-Query: "quick breakfast recipes"
-Response: {{"tags": ["breakfast"], "max_time": 30}}
+Query: "quick vegetarian recipes, high protein and low fat"
+Response: {{"dietary_tags": ["vegetarian"], "max_time": 30, "high_protein": true, "low_fat": true, "tags": ["main", "soup", "salad"]}}
 
 Example 3:
 Query: "chicken curry"
 Response: {{"recipe_name": "chicken curry"}}
+
+Example 4:
+Query: "chocolate cake"
+Response: {{"recipe_name": "chocolate cake", "tags": ["dessert"]}}
+
+Example 5:
+Query: "5 easy breakfast recipes"
+Response: {{"tags": ["breakfast"], "difficulty": ["easy"], "result_limit": 5}}
 
 Now extract filters for the user query above.
 """

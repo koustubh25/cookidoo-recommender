@@ -28,7 +28,7 @@ class Settings:
     GEMINI_MODEL: str = "gemini-1.5-flash"
 
     # Application
-    RESULT_LIMIT: int = int(os.getenv("RESULT_LIMIT", "10"))
+    RESULT_LIMIT: int = int(os.getenv("RESULT_LIMIT", "2"))  # Default 2 results unless specified in query
     SESSION_MEMORY_SIZE: int = int(os.getenv("SESSION_MEMORY_SIZE", "10"))
     RESPONSE_TIMEOUT_SECONDS: int = int(os.getenv("RESPONSE_TIMEOUT_SECONDS", "10"))
     MAX_RETRIES: int = int(os.getenv("MAX_RETRIES", "3"))

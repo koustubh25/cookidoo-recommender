@@ -82,6 +82,27 @@ class RecipeQueries:
                 """)
                 params.append(f"%{ingredient}%")
 
+        # Nutritional filters
+        if "high_protein" in filters and filters["high_protein"]:
+            # High protein: > 20g per serving
+            conditions.append("r.nutrition_protein_g > %s")
+            params.append(20)
+
+        if "low_fat" in filters and filters["low_fat"]:
+            # Low fat: < 10g per serving
+            conditions.append("r.nutrition_fat_g < %s")
+            params.append(10)
+
+        if "low_carb" in filters and filters["low_carb"]:
+            # Low carb: < 30g per serving
+            conditions.append("r.nutrition_carbs_g < %s")
+            params.append(30)
+
+        if "low_calorie" in filters and filters["low_calorie"]:
+            # Low calorie: < 300 kcal per serving
+            conditions.append("r.nutrition_calories_kcal < %s")
+            params.append(300)
+
         where_clause = " AND ".join(conditions) if conditions else "1=1"
         return where_clause, params
 
@@ -115,7 +136,7 @@ class RecipeQueries:
         embedding_str = "[" + ",".join(map(str, embedding)) + "]"
 
         query = f"""
-            SELECT
+            SELECT DISTINCT ON (r.recipe_id)
                 r.recipe_id,
                 r.title,
                 r.url,
@@ -137,7 +158,7 @@ class RecipeQueries:
             JOIN recipe_thermomix_versions rtv ON r.recipe_id = rtv.recipe_id
             WHERE {where_clause}
             AND r.embedding IS NOT NULL
-            ORDER BY r.embedding <-> %s::vector
+            ORDER BY r.recipe_id, r.embedding <-> %s::vector
             LIMIT %s;
         """
 
