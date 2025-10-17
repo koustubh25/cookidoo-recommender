@@ -3,85 +3,50 @@
 import os
 import time
 import logging
-from typing import Optional
 import pg8000
-from google.oauth2 import service_account
 from config.settings import settings
 
 logger = logging.getLogger(__name__)
 
 
 class AlloyDBConnection:
-    """Manages AlloyDB database connections with IAM authentication via Auth Proxy."""
+    """Manages AlloyDB database connections using public IP."""
 
     def __init__(self):
         """Initialize the connection manager."""
         self._validated = False
-        self.proxy_host = settings.ALLOYDB_PROXY_HOST if hasattr(settings, 'ALLOYDB_PROXY_HOST') else 'localhost'
-        self.proxy_port = settings.ALLOYDB_PROXY_PORT if hasattr(settings, 'ALLOYDB_PROXY_PORT') else 5432
-
-    def _get_instance_connection_name(self) -> str:
-        """
-        Build AlloyDB instance connection name for proxy.
-
-        Format: projects/PROJECT_ID/locations/REGION/clusters/CLUSTER/instances/INSTANCE
-        """
-        connection_name = (
-            f"projects/{settings.GCP_PROJECT_ID}/"
-            f"locations/{settings.ALLOYDB_REGION}/"
-            f"clusters/{settings.ALLOYDB_CLUSTER}/"
-            f"instances/{settings.ALLOYDB_INSTANCE}"
-        )
-        logger.debug(f"Instance connection name: {connection_name}")
-        return connection_name
-
-    def _get_credentials(self):
-        """Get service account credentials for IAM authentication."""
-        if settings.GCP_SERVICE_ACCOUNT_JSON and os.path.exists(settings.GCP_SERVICE_ACCOUNT_JSON):
-            credentials = service_account.Credentials.from_service_account_file(
-                settings.GCP_SERVICE_ACCOUNT_JSON,
-                scopes=["https://www.googleapis.com/auth/cloud-platform"]
-            )
-            logger.info("Using service account credentials from JSON file")
-            return credentials
-        else:
-            raise ValueError("Service account JSON file not found. Please set GCP_SERVICE_ACCOUNT_JSON.")
 
     def connect_with_retry(self) -> None:
         """
-        Establish connection to AlloyDB via Auth Proxy with IAM authentication.
+        Establish connection to AlloyDB using public IP.
 
-        Connects through AlloyDB Auth Proxy running locally.
-        Requires proxy to be started with: ./alloydb-auth-proxy <instance-uri>
-        Implements retry logic for VPN connectivity issues.
+        Connects directly to AlloyDB instance via public IP address.
+        Requires AlloyDB instance to have public IP enabled.
+        Implements retry logic for network connectivity issues.
         """
         for attempt in range(settings.MAX_RETRIES):
             try:
-                logger.info(f"Attempting to connect to AlloyDB via proxy (attempt {attempt + 1}/{settings.MAX_RETRIES})")
-                logger.info(f"Proxy: {self.proxy_host}:{self.proxy_port}")
-                logger.info(f"Project: {settings.GCP_PROJECT_ID}")
-                logger.info(f"Region: {settings.ALLOYDB_REGION}")
-                logger.info(f"Cluster: {settings.ALLOYDB_CLUSTER}")
-                logger.info(f"Instance: {settings.ALLOYDB_INSTANCE}")
+                logger.info(f"Attempting to connect to AlloyDB (attempt {attempt + 1}/{settings.MAX_RETRIES})")
+                logger.info(f"Host: {settings.ALLOYDB_HOST}")
+                logger.info(f"Port: {settings.ALLOYDB_PORT}")
                 logger.info(f"Database: {settings.ALLOYDB_DATABASE}")
                 logger.info(f"User: {settings.ALLOYDB_USER}")
 
-                logger.debug(f"Expected proxy command: ./alloydb-auth-proxy {self._get_instance_connection_name()}")
-
-                # Connect to AlloyDB through the proxy
-                # The proxy handles IAM authentication
+                # Connect to AlloyDB using public IP
                 import socket
                 original_timeout = socket.getdefaulttimeout()
                 socket.setdefaulttimeout(5.0)
 
                 try:
-                    logger.debug(f"Connecting to proxy at {self.proxy_host}:{self.proxy_port}...")
+                    logger.debug(f"Connecting to AlloyDB at {settings.ALLOYDB_HOST}:{settings.ALLOYDB_PORT}...")
                     conn = pg8000.connect(
-                        host=self.proxy_host,
-                        port=self.proxy_port,
+                        host=settings.ALLOYDB_HOST,
+                        port=settings.ALLOYDB_PORT,
                         database=settings.ALLOYDB_DATABASE,
                         user=settings.ALLOYDB_USER,
+                        password=settings.ALLOYDB_PASSWORD,
                         timeout=5,
+                        ssl_context=True,  # Enable SSL for public IP connections
                     )
                     logger.debug("Connection object created successfully")
                 finally:
@@ -100,17 +65,17 @@ class AlloyDBConnection:
                 conn.close()
                 logger.debug("Test connection closed")
 
-                logger.info("Successfully connected to AlloyDB via Auth Proxy using IAM authentication")
+                logger.info("Successfully connected to AlloyDB via public IP")
                 return
 
             except socket.timeout as e:
                 logger.error(f"Connection timeout after 5 seconds (attempt {attempt + 1})")
                 logger.error(f"Timeout error details: {type(e).__name__}: {str(e)}")
                 logger.error("Possible causes:")
-                logger.error("  1. AlloyDB Auth Proxy not running")
-                logger.error(f"  2. Proxy not listening on {self.proxy_host}:{self.proxy_port}")
+                logger.error(f"  1. AlloyDB public IP not accessible from your network")
+                logger.error(f"  2. Firewall blocking connection to {settings.ALLOYDB_HOST}:{settings.ALLOYDB_PORT}")
                 logger.error("  3. VPN issues or network connectivity problems")
-                logger.error(f"\nStart the proxy with: ./alloydb-auth-proxy {self._get_instance_connection_name()}")
+                logger.error("  4. AlloyDB instance not running or public IP not enabled")
 
                 if attempt < settings.MAX_RETRIES - 1:
                     wait_time = 2 ** attempt
@@ -119,7 +84,7 @@ class AlloyDBConnection:
                 else:
                     raise ConnectionError(
                         f"Failed to connect to AlloyDB after {settings.MAX_RETRIES} attempts: Connection timeout after 5 seconds. "
-                        f"Ensure AlloyDB Auth Proxy is running: ./alloydb-auth-proxy {self._get_instance_connection_name()}"
+                        f"Check firewall rules and ensure AlloyDB public IP is enabled."
                     )
 
             except Exception as e:
@@ -130,19 +95,21 @@ class AlloyDBConnection:
                 # Log additional context for specific error types
                 if "connection refused" in str(e).lower():
                     logger.error("Connection refused error. Check:")
-                    logger.error(f"  1. AlloyDB Auth Proxy is running on {self.proxy_host}:{self.proxy_port}")
-                    logger.error(f"  2. Start proxy: ./alloydb-auth-proxy {self._get_instance_connection_name()}")
-                    logger.error("  3. Proxy is bound to the correct port")
-                elif "authentication" in str(e).lower() or "permission" in str(e).lower():
+                    logger.error(f"  1. AlloyDB instance is running")
+                    logger.error(f"  2. Public IP is enabled on the instance")
+                    logger.error(f"  3. Host and port are correct: {settings.ALLOYDB_HOST}:{settings.ALLOYDB_PORT}")
+                    logger.error("  4. Firewall allows connections from your IP")
+                elif "authentication" in str(e).lower() or "password" in str(e).lower():
                     logger.error("Authentication error detected. Check:")
-                    logger.error("  1. AlloyDB Auth Proxy started with correct service account credentials")
-                    logger.error("  2. Service account has 'roles/alloydb.client' IAM role")
-                    logger.error("  3. IAM database user exists in AlloyDB")
-                    logger.error("  4. Database user has necessary privileges")
-                elif "no such file or directory" in str(e).lower() or "host" in str(e).lower():
-                    logger.error("Host/socket error. Verify:")
-                    logger.error(f"  1. Proxy is running and listening on {self.proxy_host}:{self.proxy_port}")
-                    logger.error(f"  2. Start proxy: ./alloydb-auth-proxy {self._get_instance_connection_name()}")
+                    logger.error("  1. Username is correct")
+                    logger.error("  2. Password is correct")
+                    logger.error("  3. User has permission to access the database")
+                    logger.error("  4. SSL settings are correct")
+                elif "no route to host" in str(e).lower() or "network unreachable" in str(e).lower():
+                    logger.error("Network error. Verify:")
+                    logger.error(f"  1. AlloyDB public IP address is correct: {settings.ALLOYDB_HOST}")
+                    logger.error("  2. VPN connection is active")
+                    logger.error("  3. Network can reach Google Cloud")
 
                 if attempt < settings.MAX_RETRIES - 1:
                     # Exponential backoff: 2^attempt seconds
@@ -156,7 +123,7 @@ class AlloyDBConnection:
 
     def get_connection(self):
         """
-        Get a new connection via Auth Proxy using IAM authentication.
+        Get a new connection using public IP.
 
         Returns:
             Database connection object
@@ -167,13 +134,15 @@ class AlloyDBConnection:
             socket.setdefaulttimeout(5.0)
 
             try:
-                logger.debug(f"Getting new connection via proxy at {self.proxy_host}:{self.proxy_port}")
+                logger.debug(f"Getting new connection to {settings.ALLOYDB_HOST}:{settings.ALLOYDB_PORT}")
                 conn = pg8000.connect(
-                    host=self.proxy_host,
-                    port=self.proxy_port,
+                    host=settings.ALLOYDB_HOST,
+                    port=settings.ALLOYDB_PORT,
                     database=settings.ALLOYDB_DATABASE,
                     user=settings.ALLOYDB_USER,
+                    password=settings.ALLOYDB_PASSWORD,
                     timeout=5,
+                    ssl_context=True,
                 )
                 logger.debug("Connection obtained successfully")
                 return conn
@@ -182,13 +151,13 @@ class AlloyDBConnection:
 
         except socket.timeout as e:
             logger.error(f"Connection timeout after 5 seconds: {str(e)}")
-            logger.error(f"Ensure AlloyDB Auth Proxy is running: ./alloydb-auth-proxy {self._get_instance_connection_name()}")
-            raise ConnectionError(f"Connection timeout after 5 seconds. Check proxy is running and VPN connectivity.")
+            logger.error(f"Check network connectivity to {settings.ALLOYDB_HOST}")
+            raise ConnectionError(f"Connection timeout after 5 seconds. Check VPN and network connectivity.")
         except Exception as e:
             logger.error(f"Failed to get connection: {str(e)}")
             logger.error(f"Error type: {type(e).__name__}")
             if "connection refused" in str(e).lower():
-                logger.error(f"Proxy not running. Start with: ./alloydb-auth-proxy {self._get_instance_connection_name()}")
+                logger.error(f"Connection refused. Check if AlloyDB is accessible at {settings.ALLOYDB_HOST}:{settings.ALLOYDB_PORT}")
             raise
 
     def return_connection(self, conn):
@@ -264,10 +233,10 @@ class AlloyDBConnection:
             return False
 
     def close(self):
-        """Close any resources (no-op when using proxy)."""
-        # When using Auth Proxy, connections are closed individually
+        """Close any resources (no-op when using direct connections)."""
+        # Connections are closed individually
         # No global connector to close
-        logger.info("Connection manager shutdown (proxy-based connections)")
+        logger.info("Connection manager shutdown")
 
 
 # Global connection instance

@@ -15,17 +15,12 @@ class Settings:
     GCP_PROJECT_ID: str = os.getenv("GCP_PROJECT_ID", "")
     GCP_SERVICE_ACCOUNT_JSON: str = os.getenv("GCP_SERVICE_ACCOUNT_JSON", "")
 
-    # AlloyDB
-    ALLOYDB_INSTANCE: str = os.getenv("ALLOYDB_INSTANCE", "")
-    ALLOYDB_CLUSTER: str = os.getenv("ALLOYDB_CLUSTER", "")
-    ALLOYDB_REGION: str = os.getenv("ALLOYDB_REGION", "us-central1")
+    # AlloyDB - Direct connection via public IP
+    ALLOYDB_HOST: str = os.getenv("ALLOYDB_HOST", "")  # Public IP address of AlloyDB instance
+    ALLOYDB_PORT: int = int(os.getenv("ALLOYDB_PORT", "5432"))
     ALLOYDB_DATABASE: str = os.getenv("ALLOYDB_DATABASE", "recipes")
-    # For IAM auth, use service account email (e.g., my-sa@project.iam.gserviceaccount.com)
     ALLOYDB_USER: str = os.getenv("ALLOYDB_USER", "")
-
-    # AlloyDB Auth Proxy settings
-    ALLOYDB_PROXY_HOST: str = os.getenv("ALLOYDB_PROXY_HOST", "localhost")
-    ALLOYDB_PROXY_PORT: int = int(os.getenv("ALLOYDB_PROXY_PORT", "5432"))
+    ALLOYDB_PASSWORD: str = os.getenv("ALLOYDB_PASSWORD", "")
 
     # Vertex AI
     VERTEX_AI_LOCATION: str = os.getenv("VERTEX_AI_LOCATION", "us-central1")
@@ -52,9 +47,10 @@ class Settings:
         required = [
             cls.GCP_PROJECT_ID,
             cls.GCP_SERVICE_ACCOUNT_JSON,
-            cls.ALLOYDB_INSTANCE,
+            cls.ALLOYDB_HOST,
             cls.ALLOYDB_DATABASE,
             cls.ALLOYDB_USER,
+            cls.ALLOYDB_PASSWORD,
         ]
         return all(required)
 

@@ -49,7 +49,15 @@ cd ask-recipes
 /Users/gaikwadk/miniforge3/bin/python3 -m pip install -r requirements.txt
 ```
 
-3. **Configure environment variables**
+3. **Enable AlloyDB Public IP**
+
+In the Google Cloud Console:
+- Navigate to your AlloyDB instance
+- Enable Public IP address
+- Add your machine's IP to the authorized networks
+- Note the public IP address
+
+4. **Configure environment variables**
 
 Copy `.env.example` to `.env` and fill in your configuration:
 
@@ -62,52 +70,23 @@ Edit `.env` with your details:
 ```env
 GCP_PROJECT_ID=your-gcp-project-id
 GCP_SERVICE_ACCOUNT_JSON=path/to/service-account.json
-ALLOYDB_INSTANCE=your-alloydb-instance
-ALLOYDB_CLUSTER=your-alloydb-cluster
-ALLOYDB_REGION=your-region
+
+# AlloyDB public IP connection
+ALLOYDB_HOST=34.87.123.45  # Your AlloyDB public IP
+ALLOYDB_PORT=5432
 ALLOYDB_DATABASE=your-database-name
-# Use your service account email for IAM authentication
-ALLOYDB_USER=your-sa@project-id.iam.gserviceaccount.com
+ALLOYDB_USER=your-database-username
+ALLOYDB_PASSWORD=your-database-password
 ```
 
-**Important**: This system uses **IAM authentication** for AlloyDB. Make sure:
-- Your service account has the `Cloud AlloyDB Client` role
-- The service account is granted database access in AlloyDB
-- The `ALLOYDB_USER` should be your service account email (e.g., `my-sa@project-id.iam.gserviceaccount.com`)
+**Important**: This system connects to AlloyDB via **public IP** with username/password authentication. Make sure:
+- AlloyDB instance has public IP enabled
+- Your IP address is in the authorized networks list
+- Database user has the necessary privileges
 
 ## Usage
 
-### Start the AlloyDB Auth Proxy
-
-Before running the chatbot, you must start the AlloyDB Auth Proxy to enable IAM authentication:
-
-1. **Download the AlloyDB Auth Proxy:**
-
-```bash
-curl -o alloydb-auth-proxy https://storage.googleapis.com/alloydb-auth-proxy/v1.10.1/alloydb-auth-proxy.darwin.amd64
-chmod +x alloydb-auth-proxy
-```
-
-2. **Start the proxy with your service account credentials:**
-
-```bash
-export GOOGLE_APPLICATION_CREDENTIALS=/path/to/your/service-account.json
-./alloydb-auth-proxy \
-  "projects/YOUR_PROJECT_ID/locations/YOUR_REGION/clusters/YOUR_CLUSTER/instances/YOUR_INSTANCE"
-```
-
-Example:
-```bash
-export GOOGLE_APPLICATION_CREDENTIALS=/Users/gaikwadk/keys/cookidoo-key.json
-./alloydb-auth-proxy \
-  "projects/cookidoo-474409/locations/australia-southeast2/clusters/homeutil/instances/homeutil-primary"
-```
-
-The proxy will start on `localhost:5432` by default. Keep this terminal open while using the chatbot.
-
 ### Start the Chatbot
-
-In a **new terminal window**, run the chatbot:
 
 ```bash
 python run_chatbot.py
@@ -222,63 +201,78 @@ The system detects vague queries and asks clarifying questions:
 
 ## Troubleshooting
 
-### IAM Authentication Setup
+### AlloyDB Public IP Setup
 
-To set up IAM authentication for AlloyDB:
+To enable public IP access for AlloyDB:
 
-1. **Grant AlloyDB IAM database user role to your service account:**
+1. **Enable public IP on your AlloyDB instance:**
    ```bash
-   gcloud alloydb users create YOUR_SERVICE_ACCOUNT_EMAIL \
+   gcloud alloydb instances update YOUR_INSTANCE \
      --cluster=YOUR_CLUSTER \
      --region=YOUR_REGION \
-     --type=IAM_BASED
+     --assign-inbound-public-ip=PRIMARY
    ```
 
-2. **Grant database access in PostgreSQL:**
-   ```sql
-   -- Connect to your AlloyDB instance as a superuser
-   GRANT ALL PRIVILEGES ON DATABASE recipes TO "YOUR_SERVICE_ACCOUNT_EMAIL";
-   GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO "YOUR_SERVICE_ACCOUNT_EMAIL";
+2. **Add authorized network (your IP address):**
+   ```bash
+   gcloud alloydb instances update YOUR_INSTANCE \
+     --cluster=YOUR_CLUSTER \
+     --region=YOUR_REGION \
+     --authorized-external-networks=YOUR_IP_ADDRESS/32
    ```
 
-3. **Verify service account has these IAM roles:**
-   - `roles/alloydb.client` - For database connectivity
+3. **Get the public IP address:**
+   ```bash
+   gcloud alloydb instances describe YOUR_INSTANCE \
+     --cluster=YOUR_CLUSTER \
+     --region=YOUR_REGION \
+     --format="value(ipAddress)"
+   ```
+
+4. **Verify service account has these IAM roles:**
    - `roles/aiplatform.user` - For Vertex AI/Gemini access
 
 ### Connection Issues
 
 **"Connection refused" or "Connection timeout" errors:**
 
-1. **Ensure AlloyDB Auth Proxy is running:**
+1. **Verify AlloyDB public IP is enabled:**
+   - Check in Google Cloud Console that your instance has a public IP
+   - Get the IP address from instance details
+
+2. **Check firewall/authorized networks:**
    ```bash
-   # Check if proxy is running
-   ps aux | grep alloydb-auth-proxy
+   # Find your current IP
+   curl ifconfig.me
 
-   # Start the proxy if not running
-   export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
-   ./alloydb-auth-proxy "projects/PROJECT/locations/REGION/clusters/CLUSTER/instances/INSTANCE"
+   # Ensure it's in the authorized networks list
+   gcloud alloydb instances describe YOUR_INSTANCE \
+     --cluster=YOUR_CLUSTER \
+     --region=YOUR_REGION \
+     --format="value(authorizedExternalNetworks)"
    ```
 
-2. **Check proxy is listening on the correct port:**
+3. **Test connectivity:**
    ```bash
-   # Default is localhost:5432
-   netstat -an | grep 5432
+   # Test if port is reachable
+   nc -zv YOUR_ALLOYDB_IP 5432
+
+   # Or use telnet
+   telnet YOUR_ALLOYDB_IP 5432
    ```
 
-   If you need to use a different port, update your `.env` file:
-   ```env
-   ALLOYDB_PROXY_HOST=localhost
-   ALLOYDB_PROXY_PORT=5432
-   ```
+4. **Verify credentials:**
+   - Check username and password in `.env` file
+   - Ensure the database user has necessary privileges
+   - Test connection with psql:
+     ```bash
+     psql "host=YOUR_IP port=5432 dbname=YOUR_DB user=YOUR_USER sslmode=require"
+     ```
 
-3. **Verify VPN connection:**
-   - The system automatically retries with exponential backoff
-   - Check VPN connection to Google Cloud
-
-4. **Check IAM permissions:**
-   - Verify service account has `Cloud AlloyDB Client` role
-   - Ensure IAM database user is created in AlloyDB
-   - Check that service account JSON path is correct in `GOOGLE_APPLICATION_CREDENTIALS`
+5. **Check SSL requirements:**
+   - AlloyDB public IP connections require SSL
+   - The code automatically enables SSL (`ssl_context=True`)
+   - If you see SSL errors, check your pg8000 version
 
 ### No Results
 
