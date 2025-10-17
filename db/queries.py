@@ -25,25 +25,37 @@ class RecipeQueries:
         conditions = []
         params = []
 
+        logger.info("="*80)
+        logger.info("BUILDING WHERE CLAUSE")
+        logger.info(f"Input filters: {filters}")
+        logger.info("="*80)
+
         # Always filter by TM6 compatibility
         conditions.append("rtv.version = %s")
         params.append(settings.THERMOMIX_VERSION)
+        logger.debug(f"Added TM6 filter: version = {settings.THERMOMIX_VERSION}")
 
         # Dietary tags filter (case-insensitive)
         if "dietary_tags" in filters and filters["dietary_tags"]:
+            logger.info(f"Processing dietary_tags filter: {filters['dietary_tags']}")
             # Use ILIKE for case-insensitive matching
             dietary_conditions = []
             for dietary_tag in filters["dietary_tags"]:
                 dietary_conditions.append("dietary_tag ILIKE %s")
-                params.append(f"%{dietary_tag}%")
+                pattern = f"%{dietary_tag}%"
+                params.append(pattern)
+                logger.info(f"  Added dietary tag pattern: {pattern}")
 
             dietary_clause = " OR ".join(dietary_conditions)
-            conditions.append(f"""
+            dietary_sql = f"""
                 r.recipe_id IN (
                     SELECT recipe_id FROM recipe_dietary_tags
                     WHERE {dietary_clause}
                 )
-            """)
+            """
+            conditions.append(dietary_sql)
+            logger.info(f"  Dietary SQL clause: {dietary_sql}")
+            logger.info(f"  Dietary params: {[p for p in params if '%' in str(p)]}")
 
         # Tags filter (meal type, etc.) - case-insensitive
         if "tags" in filters and filters["tags"]:
@@ -114,6 +126,13 @@ class RecipeQueries:
             params.append(300)
 
         where_clause = " AND ".join(conditions) if conditions else "1=1"
+
+        logger.info("="*80)
+        logger.info("FINAL WHERE CLAUSE:")
+        logger.info(f"SQL: {where_clause}")
+        logger.info(f"Params: {params}")
+        logger.info("="*80)
+
         return where_clause, params
 
     @staticmethod
@@ -179,6 +198,14 @@ class RecipeQueries:
             # Embedding is used 3 times in the query
             query_params = [embedding_str, embedding_str] + params + [embedding_str, limit]
 
+            logger.info("="*80)
+            logger.info("EXECUTING VECTOR SEARCH QUERY")
+            logger.info("="*80)
+            logger.info(f"Full SQL Query:\n{query}")
+            logger.info(f"Query params (non-embedding): {params}")
+            logger.info(f"Result limit: {limit}")
+            logger.info("="*80)
+
             cursor.execute(query, query_params)
             results = cursor.fetchall()
 
@@ -186,10 +213,28 @@ class RecipeQueries:
             columns = [desc[0] for desc in cursor.description]
             recipes = [dict(zip(columns, row)) for row in results]
 
+            logger.info("="*80)
+            logger.info(f"QUERY RESULTS: {len(recipes)} recipes returned")
+            if recipes:
+                logger.info("Sample results:")
+                for i, recipe in enumerate(recipes[:3], 1):
+                    recipe_id = recipe.get('recipe_id')
+                    logger.info(f"  {i}. {recipe.get('title')} (ID: {recipe_id}, Similarity: {recipe.get('similarity_score', 0):.3f})")
+
+                    # Verify dietary tags for debugging
+                    verify_cursor = conn.cursor()
+                    verify_cursor.execute(
+                        "SELECT dietary_tag FROM recipe_dietary_tags WHERE recipe_id = %s",
+                        (recipe_id,)
+                    )
+                    dietary_tags = [row[0] for row in verify_cursor.fetchall()]
+                    verify_cursor.close()
+                    logger.info(f"     Dietary tags: {dietary_tags}")
+            logger.info("="*80)
+
             cursor.close()
             db_connection.return_connection(conn)
 
-            logger.info(f"Vector search returned {len(recipes)} results")
             return recipes
 
         except Exception as e:
