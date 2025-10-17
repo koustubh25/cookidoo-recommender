@@ -77,7 +77,37 @@ ALLOYDB_USER=your-sa@project-id.iam.gserviceaccount.com
 
 ## Usage
 
+### Start the AlloyDB Auth Proxy
+
+Before running the chatbot, you must start the AlloyDB Auth Proxy to enable IAM authentication:
+
+1. **Download the AlloyDB Auth Proxy:**
+
+```bash
+curl -o alloydb-auth-proxy https://storage.googleapis.com/alloydb-auth-proxy/v1.10.1/alloydb-auth-proxy.darwin.amd64
+chmod +x alloydb-auth-proxy
+```
+
+2. **Start the proxy with your service account credentials:**
+
+```bash
+export GOOGLE_APPLICATION_CREDENTIALS=/path/to/your/service-account.json
+./alloydb-auth-proxy \
+  "projects/YOUR_PROJECT_ID/locations/YOUR_REGION/clusters/YOUR_CLUSTER/instances/YOUR_INSTANCE"
+```
+
+Example:
+```bash
+export GOOGLE_APPLICATION_CREDENTIALS=/Users/gaikwadk/keys/cookidoo-key.json
+./alloydb-auth-proxy \
+  "projects/cookidoo-474409/locations/australia-southeast2/clusters/homeutil/instances/homeutil-primary"
+```
+
+The proxy will start on `localhost:5432` by default. Keep this terminal open while using the chatbot.
+
 ### Start the Chatbot
+
+In a **new terminal window**, run the chatbot:
 
 ```bash
 python run_chatbot.py
@@ -217,12 +247,38 @@ To set up IAM authentication for AlloyDB:
 
 ### Connection Issues
 
-If you're on VPN and experiencing connection issues:
-- The system automatically retries with exponential backoff
-- Check VPN connection to Google Cloud
-- Verify service account has `Cloud AlloyDB Client` role
-- Ensure IAM database user is created in AlloyDB
-- Check that service account JSON path is correct
+**"Connection refused" or "Connection timeout" errors:**
+
+1. **Ensure AlloyDB Auth Proxy is running:**
+   ```bash
+   # Check if proxy is running
+   ps aux | grep alloydb-auth-proxy
+
+   # Start the proxy if not running
+   export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
+   ./alloydb-auth-proxy "projects/PROJECT/locations/REGION/clusters/CLUSTER/instances/INSTANCE"
+   ```
+
+2. **Check proxy is listening on the correct port:**
+   ```bash
+   # Default is localhost:5432
+   netstat -an | grep 5432
+   ```
+
+   If you need to use a different port, update your `.env` file:
+   ```env
+   ALLOYDB_PROXY_HOST=localhost
+   ALLOYDB_PROXY_PORT=5432
+   ```
+
+3. **Verify VPN connection:**
+   - The system automatically retries with exponential backoff
+   - Check VPN connection to Google Cloud
+
+4. **Check IAM permissions:**
+   - Verify service account has `Cloud AlloyDB Client` role
+   - Ensure IAM database user is created in AlloyDB
+   - Check that service account JSON path is correct in `GOOGLE_APPLICATION_CREDENTIALS`
 
 ### No Results
 

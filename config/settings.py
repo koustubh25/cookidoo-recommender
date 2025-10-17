@@ -23,6 +23,10 @@ class Settings:
     # For IAM auth, use service account email (e.g., my-sa@project.iam.gserviceaccount.com)
     ALLOYDB_USER: str = os.getenv("ALLOYDB_USER", "")
 
+    # AlloyDB Auth Proxy settings
+    ALLOYDB_PROXY_HOST: str = os.getenv("ALLOYDB_PROXY_HOST", "localhost")
+    ALLOYDB_PROXY_PORT: int = int(os.getenv("ALLOYDB_PROXY_PORT", "5432"))
+
     # Vertex AI
     VERTEX_AI_LOCATION: str = os.getenv("VERTEX_AI_LOCATION", "us-central1")
     EMBEDDING_MODEL: str = "text-embedding-005"
