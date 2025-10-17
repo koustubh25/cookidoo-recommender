@@ -73,6 +73,26 @@ class RecipeQueries:
                 )
             """)
 
+        # Cuisine filter - case-insensitive
+        if "cuisine" in filters and filters["cuisine"]:
+            logger.info(f"Processing cuisine filter: {filters['cuisine']}")
+            cuisine_conditions = []
+            for cuisine in filters["cuisine"]:
+                cuisine_conditions.append("tag ILIKE %s")
+                pattern = f"%{cuisine}%"
+                params.append(pattern)
+                logger.info(f"  Added cuisine pattern: {pattern}")
+
+            cuisine_clause = " OR ".join(cuisine_conditions)
+            cuisine_sql = f"""
+                r.recipe_id IN (
+                    SELECT recipe_id FROM recipe_tags
+                    WHERE {cuisine_clause}
+                )
+            """
+            conditions.append(cuisine_sql)
+            logger.info(f"  Cuisine SQL clause: {cuisine_sql}")
+
         # Time constraints
         if "max_time" in filters:
             conditions.append("r.total_time_minutes <= %s")

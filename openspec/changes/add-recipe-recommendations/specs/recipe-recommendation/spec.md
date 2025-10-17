@@ -73,6 +73,22 @@ The system SHALL extract structured filters from natural language queries using 
 - **WHEN** user queries "2 recipes"
 - **THEN** system extracts tags=["mains", "soups", "salads"] and result_limit=2
 
+#### Scenario: Extract cuisine type
+- **WHEN** user queries "indian recipes"
+- **THEN** system extracts cuisine=["indian"] and tags=["mains", "soups", "salads"]
+
+#### Scenario: Filter by cuisine in database
+- **WHEN** cuisine filter is set (e.g., "indian")
+- **THEN** system filters recipes using ILIKE pattern matching in recipe_tags table
+
+#### Scenario: Combine cuisine with other filters
+- **WHEN** user queries "vegetarian thai recipes"
+- **THEN** system extracts both dietary_tags=["vegetarian"] and cuisine=["thai"]
+
+#### Scenario: Cuisine in recipe name
+- **WHEN** user queries "easy italian pasta"
+- **THEN** system extracts cuisine=["italian"], recipe_name="pasta", and difficulty=["easy"]
+
 #### Scenario: Include soups as meal option
 - **WHEN** user queries generic recipes
 - **THEN** system includes soups along with mains and salads as valid meal options

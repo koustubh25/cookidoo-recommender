@@ -315,11 +315,37 @@ r.recipe_id NOT IN (
 - Filters: `{main_protein: "chicken", exclude_tags: ["beef", "pork", "lamb", "fish"]}`
 - Results: Only recipes with "chicken" in title/tags, excluding beef/pork/lamb/fish recipes
 
+### Decision 16: Cuisine Filtering
+**What**: Extract cuisine type from queries and filter by cuisine tags in the database
+
+**Why**:
+- Users often search by cuisine (e.g., "indian recipes", "italian pasta")
+- Cuisine information is stored as tags in recipe_tags table
+- Improves discoverability of recipes by culinary tradition
+- Allows combining cuisine with other filters (e.g., "vegetarian thai recipes")
+
+**Implementation**:
+- Extract `cuisine` filter from query (indian, italian, chinese, mexican, thai, french, japanese, greek, etc.)
+- Match cuisine using ILIKE pattern matching in recipe_tags table
+- Support multiple cuisines in a single query
+- Combine with other filters (dietary, time, difficulty, etc.)
+
+**Example**:
+- Query: "indian recipes"
+- Filters: `{cuisine: ["indian"], tags: ["mains", "soups", "salads"]}`
+- SQL: `WHERE r.recipe_id IN (SELECT recipe_id FROM recipe_tags WHERE tag ILIKE '%indian%')`
+
+**Examples**:
+- "indian recipes" → `{cuisine: ["indian"], tags: ["mains", "soups", "salads"]}`
+- "easy italian pasta" → `{cuisine: ["italian"], recipe_name: "pasta", difficulty: ["easy"]}`
+- "vegetarian thai recipes" → `{dietary_tags: ["vegetarian"], cuisine: ["thai"], tags: ["mains", "soups", "salads"]}`
+
 ### Decision 15: Default to Meal Categories
-**What**: When users ask for generic "recipes" without specifying a category, default to meal categories: "mains", "soups", and "salads"
+**What**: When users ask for generic "recipes" or mention "lunch"/"dinner", default to meal categories: "mains", "soups", and "salads"
 
 **Why**:
 - Users typically mean complete meals when they say "recipes" without qualification
+- "Lunch" and "dinner" are not actual tags in the Cookidoo database
 - Soups and salads are often considered main meals, not just sides
 - Prevents returning desserts, drinks, or side dishes when user wants a meal
 - Other categories (desserts, drinks, breakfast) are more specific and users explicitly mention them
@@ -327,11 +353,14 @@ r.recipe_id NOT IN (
 
 **Implementation**:
 - When query contains "recipe(s)" but no explicit category mention, add `tags: ["mains", "soups", "salads"]`
+- When query mentions "lunch" or "dinner", treat as generic meal and use `tags: ["mains", "soups", "salads"]`
 - Only use other specific categories if explicitly mentioned (e.g., "desserts", "drinks", "breakfast")
 - Apply to all generic recipe queries including protein-based (e.g., "chicken recipes" → mains, soups, salads)
 
 **Examples**:
 - "2 recipes" → `{tags: ["mains", "soups", "salads"], result_limit: 2}`
+- "lunch recipe" → `{tags: ["mains", "soups", "salads"]}`
+- "quick dinner ideas" → `{tags: ["mains", "soups", "salads"], max_time: 30}`
 - "vegetarian recipes" → `{dietary_tags: ["vegetarian"], tags: ["mains", "soups", "salads"]}`
 - "chicken recipes" → `{tags: ["mains", "soups", "salads"], main_protein: "chicken", ...}`
 - "vegetarian desserts" → `{dietary_tags: ["vegetarian"], tags: ["desserts"]}` (explicit category)
