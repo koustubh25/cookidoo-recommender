@@ -4,10 +4,9 @@ import os
 import time
 import logging
 from typing import Optional
-from google.cloud.sql.connector import Connector
-from google.auth import default
-from google.oauth2 import service_account
 import pg8000
+from google.cloud.alloydb.connector import Connector
+from google.oauth2 import service_account
 from config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -21,14 +20,20 @@ class AlloyDBConnection:
         self.connector: Optional[Connector] = None
         self._validated = False
 
-    def _get_connection_string(self) -> str:
-        """Build AlloyDB connection string."""
-        return (
+    def _get_instance_uri(self) -> str:
+        """
+        Build AlloyDB instance URI.
+
+        Format: projects/PROJECT_ID/locations/REGION/clusters/CLUSTER/instances/INSTANCE
+        """
+        instance_uri = (
             f"projects/{settings.GCP_PROJECT_ID}/"
             f"locations/{settings.ALLOYDB_REGION}/"
             f"clusters/{settings.ALLOYDB_CLUSTER}/"
             f"instances/{settings.ALLOYDB_INSTANCE}"
         )
+        logger.debug(f"Instance URI: {instance_uri}")
+        return instance_uri
 
     def _get_credentials(self):
         """Get service account credentials for IAM authentication."""
@@ -40,10 +45,7 @@ class AlloyDBConnection:
             logger.info("Using service account credentials from JSON file")
             return credentials
         else:
-            # Fall back to application default credentials
-            credentials, project = default()
-            logger.info("Using application default credentials")
-            return credentials
+            raise ValueError("Service account JSON file not found. Please set GCP_SERVICE_ACCOUNT_JSON.")
 
     def connect_with_retry(self) -> None:
         """
@@ -55,6 +57,12 @@ class AlloyDBConnection:
         for attempt in range(settings.MAX_RETRIES):
             try:
                 logger.info(f"Attempting to connect to AlloyDB (attempt {attempt + 1}/{settings.MAX_RETRIES})")
+                logger.info(f"Project: {settings.GCP_PROJECT_ID}")
+                logger.info(f"Region: {settings.ALLOYDB_REGION}")
+                logger.info(f"Cluster: {settings.ALLOYDB_CLUSTER}")
+                logger.info(f"Instance: {settings.ALLOYDB_INSTANCE}")
+                logger.info(f"Database: {settings.ALLOYDB_DATABASE}")
+                logger.info(f"User: {settings.ALLOYDB_USER}")
 
                 # Get credentials for IAM authentication
                 credentials = self._get_credentials()
@@ -64,11 +72,11 @@ class AlloyDBConnection:
 
                 # Test connection
                 conn = self.connector.connect(
-                    self._get_connection_string(),
+                    self._get_instance_uri(),
                     "pg8000",
-                    user=settings.ALLOYDB_USER,  # Service account email without @domain
+                    user=settings.ALLOYDB_USER,
                     db=settings.ALLOYDB_DATABASE,
-                    enable_iam_auth=True,  # Enable IAM authentication
+                    enable_iam_auth=True,
                 )
 
                 # Close test connection
@@ -102,7 +110,7 @@ class AlloyDBConnection:
 
         try:
             conn = self.connector.connect(
-                self._get_connection_string(),
+                self._get_instance_uri(),
                 "pg8000",
                 user=settings.ALLOYDB_USER,
                 db=settings.ALLOYDB_DATABASE,
@@ -185,11 +193,31 @@ class AlloyDBConnection:
             logger.error(f"Connection validation failed: {str(e)}")
             return False
 
-    def close(self):
-        """Close the connector."""
+    async def close_async(self):
+        """Async close the connector."""
         if self.connector:
             try:
-                self.connector.close()
+                await self.connector.close_async()
+                logger.info("Database connector closed")
+            except Exception as e:
+                logger.warning(f"Error closing connector: {str(e)}")
+
+    def close(self):
+        """Close the connector synchronously."""
+        if self.connector:
+            try:
+                import asyncio
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        # If loop is running, schedule the close
+                        asyncio.create_task(self.connector.close_async())
+                    else:
+                        # If loop is not running, run it
+                        loop.run_until_complete(self.connector.close_async())
+                except RuntimeError:
+                    # No event loop, create one
+                    asyncio.run(self.connector.close_async())
                 logger.info("Database connector closed")
             except Exception as e:
                 logger.warning(f"Error closing connector: {str(e)}")

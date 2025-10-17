@@ -64,7 +64,12 @@ class RecipeChatbot:
                 print(f"\n✗ Error: {str(e)}")
 
         # Cleanup
-        db_connection.close()
+        print("\nClosing connections...")
+        try:
+            db_connection.close()
+        except Exception as e:
+            logger.warning(f"Error during cleanup: {str(e)}")
+        print("✓ Cleanup complete")
 
     def _show_welcome(self) -> None:
         """Display welcome message."""
