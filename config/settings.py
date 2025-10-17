@@ -25,7 +25,7 @@ class Settings:
     # Vertex AI
     VERTEX_AI_LOCATION: str = os.getenv("VERTEX_AI_LOCATION", "us-central1")
     EMBEDDING_MODEL: str = "text-embedding-005"
-    GEMINI_MODEL: str = "gemini-1.5-flash"
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.5-pro")
 
     # Application
     RESULT_LIMIT: int = int(os.getenv("RESULT_LIMIT", "2"))  # Default 2 results unless specified in query

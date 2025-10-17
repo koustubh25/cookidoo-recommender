@@ -38,22 +38,38 @@ class RecommendationEngine:
         Returns:
             List of ranked recipe dictionaries
         """
-        logger.info(f"Processing recommendation query: {query}")
+        logger.info("="*80)
+        logger.info(f"PROCESSING RECOMMENDATION QUERY: '{query}'")
+        logger.info(f"Skip filter extraction: {skip_filter_extraction}")
+        logger.info(f"Limit parameter: {limit}")
+        logger.info("="*80)
 
         # Stage 1: Extract structured filters (unless skipped)
         filters = {}
         if not skip_filter_extraction:
             try:
+                logger.info("Calling Gemini to extract filters...")
                 filters = self.ai_client.extract_filters(query)
-                logger.info(f"Extracted filters: {filters}")
+                logger.info(f"✓ Extracted filters: {filters}")
             except Exception as e:
-                logger.warning(f"Filter extraction failed, falling back to pure vector search: {str(e)}")
+                logger.warning(f"✗ Filter extraction failed, falling back to pure vector search: {str(e)}")
+                logger.exception("Filter extraction error details:")
                 filters = {}
+        else:
+            logger.info("Skipping filter extraction (skip_filter_extraction=True)")
 
         # Extract result limit from filters if present
         extracted_limit = filters.pop("result_limit", None) if filters else None
         final_limit = limit or extracted_limit or settings.RESULT_LIMIT
-        logger.info(f"Using result limit: {final_limit}")
+
+        logger.info("="*80)
+        logger.info(f"LIMIT RESOLUTION:")
+        logger.info(f"  Limit parameter: {limit}")
+        logger.info(f"  Extracted limit: {extracted_limit}")
+        logger.info(f"  Default limit: {settings.RESULT_LIMIT}")
+        logger.info(f"  Final limit: {final_limit}")
+        logger.info(f"FILTERS AFTER LIMIT EXTRACTION: {filters}")
+        logger.info("="*80)
 
         # Generate query embedding
         try:
