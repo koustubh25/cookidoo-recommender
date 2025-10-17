@@ -79,8 +79,8 @@ You are a recipe search assistant. Extract structured filters from the user's qu
 User query: "{query}"
 
 Extract the following filters if present:
-- dietary_tags: List of dietary restrictions (lactose-free, sugar-free, nut-free, gluten-free, alcohol-free, etc.)
-- tags: List of meal types, dietary preferences, or categories (breakfast, lunch, dinner, snack, appetizer, main, soup, salad, side, vegetarian, vegan, low-fat, low-carb)
+- dietary_tags: List of dietary restrictions (vegetarian, vegan, gluten-free, nut-free, mediterranean, lactose-free, sugar-free, etc.)
+- tags: List of meal types or categories (breakfast, lunch, dinner, snack, appetizer, main dishes, desserts, soups, salads, side dishes, drinks, low-fat, low-carb)
 - max_time: Maximum cooking time in minutes (if query mentions "under X minutes" or "quick")
 - min_time: Minimum cooking time in minutes
 - difficulty: List of difficulty levels (easy, medium, hard)
@@ -102,15 +102,15 @@ Only return the JSON, no other text.
 
 Example 1:
 Query: "easy vegetarian dinner under 30 minutes"
-Response: {{"tags": ["vegetarian", "dinner"], "max_time": 30, "difficulty": ["easy"]}}
+Response: {{"dietary_tags": ["vegetarian"], "tags": ["dinner", "main dishes"], "max_time": 30, "difficulty": ["easy"]}}
 
 Example 2:
 Query: "quick vegetarian recipes, high protein and low fat"
-Response: {{"tags": ["vegetarian"], "max_time": 30, "high_protein": true, "low_fat": true}}
+Response: {{"dietary_tags": ["vegetarian"], "max_time": 30, "high_protein": true, "low_fat": true}}
 
 Example 3:
-Query: "gluten free lactose free desserts"
-Response: {{"dietary_tags": ["gluten free", "lactose free"], "tags": ["desserts"]}}
+Query: "gluten free nut free desserts"
+Response: {{"dietary_tags": ["gluten free", "nut free"], "tags": ["desserts"]}}
 
 Example 4:
 Query: "chicken curry"
@@ -126,7 +126,7 @@ Response: {{"tags": ["breakfast"], "difficulty": ["easy"], "result_limit": 5}}
 
 Example 7:
 Query: "vegan low carb meals"
-Response: {{"tags": ["vegan", "low carb", "main dishes"]}}
+Response: {{"dietary_tags": ["vegan"], "tags": ["low carb", "main dishes"]}}
 
 Now extract filters for the user query above.
 """
