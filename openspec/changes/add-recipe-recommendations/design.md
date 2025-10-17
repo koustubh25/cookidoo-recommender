@@ -280,6 +280,58 @@ Not applicable - new feature with no existing functionality to preserve.
 - Vector: Recipe names already embedded in existing vectors (confirmed in embedding generation code)
 - Support queries like "chicken curry" to find recipes with those words in title
 
+### Decision 14: Main Protein Filtering
+**What**: When users search for protein-based recipes (chicken, beef, etc.), match by recipe title/tags, NOT ingredients
+
+**Why**:
+- Prevents false matches: "chicken" query should not return beef recipes with "chicken stock paste"
+- Main protein is typically in recipe title or tags (e.g., "Beef Stew" has beef tag)
+- Condiments/stock ingredients are secondary, not the main protein
+- Improves precision for protein-based searches
+
+**Implementation**:
+- Extract `main_protein` filter from query (chicken, beef, pork, lamb, fish, etc.)
+- Extract `exclude_tags` to exclude conflicting proteins
+- Match main_protein in recipe title OR recipe_tags table (not recipe_ingredients)
+- Exclude recipes with conflicting protein tags
+```sql
+-- Match chicken in title or tags
+(r.title ILIKE '%chicken%' OR r.recipe_id IN (
+    SELECT recipe_id FROM recipe_tags WHERE tag ILIKE '%chicken%'
+))
+-- Exclude beef recipes
+r.recipe_id NOT IN (
+    SELECT recipe_id FROM recipe_tags WHERE tag ILIKE '%beef%'
+) AND r.title NOT ILIKE '%beef%'
+```
+
+**Example**:
+- Query: "2 chicken recipes"
+- Filters: `{main_protein: "chicken", exclude_tags: ["beef", "pork", "lamb", "fish"]}`
+- Results: Only recipes with "chicken" in title/tags, excluding beef/pork/lamb/fish recipes
+
+### Decision 15: Default to Meal Categories
+**What**: When users ask for generic "recipes" without specifying a category, default to meal categories: "mains", "soups", and "salads"
+
+**Why**:
+- Users typically mean complete meals when they say "recipes" without qualification
+- Soups and salads are often considered main meals, not just sides
+- Prevents returning desserts, drinks, or side dishes when user wants a meal
+- Other categories (desserts, drinks, breakfast) are more specific and users explicitly mention them
+- Improves relevance by covering all common meal types
+
+**Implementation**:
+- When query contains "recipe(s)" but no explicit category mention, add `tags: ["mains", "soups", "salads"]`
+- Only use other specific categories if explicitly mentioned (e.g., "desserts", "drinks", "breakfast")
+- Apply to all generic recipe queries including protein-based (e.g., "chicken recipes" → mains, soups, salads)
+
+**Examples**:
+- "2 recipes" → `{tags: ["mains", "soups", "salads"], result_limit: 2}`
+- "vegetarian recipes" → `{dietary_tags: ["vegetarian"], tags: ["mains", "soups", "salads"]}`
+- "chicken recipes" → `{tags: ["mains", "soups", "salads"], main_protein: "chicken", ...}`
+- "vegetarian desserts" → `{dietary_tags: ["vegetarian"], tags: ["desserts"]}` (explicit category)
+- "easy breakfast" → `{tags: ["breakfast"], ...}` (explicit category)
+
 ### Decision 12: IAM Authentication for AlloyDB
 **What**: Use Google Cloud IAM authentication instead of username/password for AlloyDB connections
 

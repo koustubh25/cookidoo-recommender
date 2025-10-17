@@ -93,16 +93,35 @@ class RecipeQueries:
             conditions.append("r.title ILIKE %s")
             params.append(f"%{filters['recipe_name']}%")
 
-        # Ingredient filter
-        if "ingredients" in filters and filters["ingredients"]:
-            for ingredient in filters["ingredients"]:
+        # Main protein filter - match in title or tags, NOT just ingredients
+        if "main_protein" in filters and filters["main_protein"]:
+            protein = filters["main_protein"]
+            logger.info(f"Processing main_protein filter: {protein}")
+            # Match protein in title OR in recipe tags
+            conditions.append("""
+                (r.title ILIKE %s OR r.recipe_id IN (
+                    SELECT recipe_id FROM recipe_tags
+                    WHERE tag ILIKE %s
+                ))
+            """)
+            params.append(f"%{protein}%")
+            params.append(f"%{protein}%")
+            logger.info(f"  Added main_protein filter for: {protein}")
+
+        # Exclude tags filter (e.g., exclude beef when searching for chicken)
+        if "exclude_tags" in filters and filters["exclude_tags"]:
+            logger.info(f"Processing exclude_tags filter: {filters['exclude_tags']}")
+            for exclude_tag in filters["exclude_tags"]:
+                # Exclude recipes that have this tag OR have it in the title
                 conditions.append("""
-                    r.recipe_id IN (
-                        SELECT recipe_id FROM recipe_ingredients
-                        WHERE ingredient ILIKE %s
-                    )
+                    r.recipe_id NOT IN (
+                        SELECT recipe_id FROM recipe_tags
+                        WHERE tag ILIKE %s
+                    ) AND r.title NOT ILIKE %s
                 """)
-                params.append(f"%{ingredient}%")
+                params.append(f"%{exclude_tag}%")
+                params.append(f"%{exclude_tag}%")
+                logger.info(f"  Excluding tag: {exclude_tag}")
 
         # Nutritional filters (calculated per serving)
         # Note: Database stores total nutrition for all servings, so we divide by servings

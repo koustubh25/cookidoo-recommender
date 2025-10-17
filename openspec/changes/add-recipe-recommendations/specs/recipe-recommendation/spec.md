@@ -41,6 +41,46 @@ The system SHALL extract structured filters from natural language queries using 
 - **WHEN** user provides partial recipe name
 - **THEN** system returns recipes with titles containing the provided keywords
 
+#### Scenario: Main protein detection
+- **WHEN** user queries for protein-based recipes (e.g., "chicken recipes")
+- **THEN** system extracts main_protein filter and exclude_tags for conflicting proteins
+
+#### Scenario: Match protein in title or tags
+- **WHEN** main_protein filter is set (e.g., "chicken")
+- **THEN** system filters recipes where protein appears in title OR recipe_tags table
+
+#### Scenario: Exclude conflicting proteins
+- **WHEN** exclude_tags filter contains proteins (e.g., ["beef", "pork", "lamb"])
+- **THEN** system excludes recipes with those proteins in title or recipe_tags table
+
+#### Scenario: Prevent false ingredient matches
+- **WHEN** user searches for "chicken recipes"
+- **THEN** system returns only recipes with chicken in title/tags, NOT recipes with "chicken stock paste" ingredient
+
+#### Scenario: Default to meal categories for generic recipe queries
+- **WHEN** user queries "recipes" or "X recipes" without specifying category
+- **THEN** system adds meal category tags: ["mains", "soups", "salads"]
+
+#### Scenario: Default to meal categories for protein queries
+- **WHEN** user queries "chicken recipes" or "vegetarian recipes"
+- **THEN** system adds ["mains", "soups", "salads"] tags along with protein/dietary filters
+
+#### Scenario: Explicit category overrides default
+- **WHEN** user explicitly mentions category like "desserts", "drinks", or "breakfast"
+- **THEN** system uses that category instead of defaulting to meal categories
+
+#### Scenario: Generic recipe query
+- **WHEN** user queries "2 recipes"
+- **THEN** system extracts tags=["mains", "soups", "salads"] and result_limit=2
+
+#### Scenario: Include soups as meal option
+- **WHEN** user queries generic recipes
+- **THEN** system includes soups along with mains and salads as valid meal options
+
+#### Scenario: Include salads as meal option
+- **WHEN** user queries generic recipes
+- **THEN** system includes salads along with mains and soups as valid meal options
+
 #### Scenario: Extract nutritional requirements
 - **WHEN** user queries "high protein vegetarian recipes"
 - **THEN** system extracts high_protein=true and dietary_tags=["vegetarian"]

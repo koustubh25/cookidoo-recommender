@@ -85,7 +85,8 @@ Extract the following filters if present:
 - min_time: Minimum cooking time in minutes
 - difficulty: List of difficulty levels (easy, medium, hard)
 - recipe_name: Specific recipe name keywords if mentioned
-- ingredients: List of specific ingredients mentioned
+- main_protein: Main protein type if mentioned (chicken, beef, pork, lamb, fish, seafood, turkey, duck)
+- exclude_tags: Tags to exclude from results (e.g., if user asks for "chicken", exclude "beef", "pork", "lamb")
 - high_protein: true if query mentions high protein or protein-rich (exclude if desserts or cakes mentioned)
 - low_fat: true if query mentions low fat or reduced fat (exclude if desserts or cakes mentioned)
 - low_carb: true if query mentions low carb or keto
@@ -95,23 +96,26 @@ Extract the following filters if present:
 IMPORTANT RULES:
 1. If the query mentions "dessert", "cake", "sweet", or "pastry", DO NOT set high_protein=true or low_fat=true
 2. If the query mentions nutritional requirements (protein, low fat), exclude dessert-related tags
-3. For vegetarian/vegan queries WITHOUT "dessert" or "sweet" mentioned, add tags for savory dishes: ["main dishes", "soups", "salads", "side dishes"]
-4. Only include "desserts" tag if the query explicitly mentions desserts, sweets, cakes, or pastries
+3. When user asks for generic "recipes" WITHOUT explicit category, default to meal categories: ["mains", "soups", "salads"]
+4. Only include specific categories (desserts, drinks, side dishes, breakfast) if EXPLICITLY mentioned
+5. For vegetarian/vegan queries without explicit category, include mains, soups, and salads
+6. When a main protein is mentioned (e.g., "chicken"), set main_protein and exclude_tags for other proteins (e.g., exclude_tags: ["beef", "pork", "lamb", "fish"])
+7. main_protein should match recipe title or tags, NOT just ingredients (to avoid matching "chicken stock paste" in beef recipes)
 
 Return your answer as a JSON object. If a filter is not mentioned, omit it from the response.
 Only return the JSON, no other text.
 
 Example 1:
 Query: "easy vegetarian dinner under 30 minutes"
-Response: {{"dietary_tags": ["vegetarian"], "tags": ["dinner", "main dishes"], "max_time": 30, "difficulty": ["easy"]}}
+Response: {{"dietary_tags": ["vegetarian"], "tags": ["dinner", "mains", "soups", "salads"], "max_time": 30, "difficulty": ["easy"]}}
 
 Example 2:
 Query: "quick vegetarian recipes, high protein and low fat"
-Response: {{"dietary_tags": ["vegetarian"], "tags": ["main dishes", "soups", "salads"], "max_time": 30, "high_protein": true, "low_fat": true}}
+Response: {{"dietary_tags": ["vegetarian"], "tags": ["mains", "soups", "salads"], "max_time": 30, "high_protein": true, "low_fat": true}}
 
 Example 3:
 Query: "give me a vegetarian recipe"
-Response: {{"dietary_tags": ["vegetarian"], "tags": ["main dishes", "soups", "salads", "side dishes"]}}
+Response: {{"dietary_tags": ["vegetarian"], "tags": ["mains", "soups", "salads"]}}
 
 Example 4:
 Query: "vegetarian desserts"
@@ -121,9 +125,13 @@ Example 5:
 Query: "gluten free nut free desserts"
 Response: {{"dietary_tags": ["gluten free", "nut free"], "tags": ["desserts"]}}
 
+Example 5a:
+Query: "2 recipes"
+Response: {{"tags": ["mains", "soups", "salads"], "result_limit": 2}}
+
 Example 6:
 Query: "chicken curry"
-Response: {{"recipe_name": "chicken curry"}}
+Response: {{"recipe_name": "chicken curry", "main_protein": "chicken", "exclude_tags": ["beef", "pork", "lamb", "fish"]}}
 
 Example 7:
 Query: "chocolate cake"
@@ -135,7 +143,23 @@ Response: {{"tags": ["breakfast"], "difficulty": ["easy"], "result_limit": 5}}
 
 Example 9:
 Query: "vegan low carb meals"
-Response: {{"dietary_tags": ["vegan"], "tags": ["low carb", "main dishes", "soups", "salads"]}}
+Response: {{"dietary_tags": ["vegan"], "tags": ["mains", "soups", "salads"], "low_carb": true}}
+
+Example 10:
+Query: "2 chicken recipes"
+Response: {{"tags": ["mains", "soups", "salads"], "main_protein": "chicken", "exclude_tags": ["beef", "pork", "lamb", "fish"], "result_limit": 2}}
+
+Example 11:
+Query: "beef stew under 60 minutes"
+Response: {{"tags": ["mains", "soups", "salads"], "main_protein": "beef", "exclude_tags": ["chicken", "pork", "lamb", "fish"], "max_time": 60}}
+
+Example 12:
+Query: "vegetarian drinks"
+Response: {{"dietary_tags": ["vegetarian"], "tags": ["drinks"]}}
+
+Example 13:
+Query: "easy breakfast"
+Response: {{"tags": ["breakfast"], "difficulty": ["easy"]}}
 
 Now extract filters for the user query above.
 """
