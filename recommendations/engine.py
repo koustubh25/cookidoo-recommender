@@ -80,14 +80,22 @@ class RecommendationEngine:
 
         # Extract result limit from filters if present
         extracted_limit = filters.pop("result_limit", None) if filters else None
-        final_limit = limit or extracted_limit or settings.RESULT_LIMIT
+        user_requested_limit = limit or extracted_limit or settings.RESULT_LIMIT
+
+        # For quality-focused queries, fetch more candidates to ensure we get the best ones
+        # We'll fetch 10x the requested amount, then rank and return the top N
+        if prioritize_ratings:
+            search_limit = max(user_requested_limit * 10, 20)  # At least 20 candidates
+            logger.info(f"Quality-focused query - expanding search limit from {user_requested_limit} to {search_limit}")
+        else:
+            search_limit = user_requested_limit
 
         logger.info("="*80)
         logger.info(f"LIMIT RESOLUTION:")
         logger.info(f"  Limit parameter: {limit}")
         logger.info(f"  Extracted limit: {extracted_limit}")
-        logger.info(f"  Default limit: {settings.RESULT_LIMIT}")
-        logger.info(f"  Final limit: {final_limit}")
+        logger.info(f"  User requested limit: {user_requested_limit}")
+        logger.info(f"  Search limit (for vector search): {search_limit}")
         logger.info(f"FILTERS AFTER LIMIT EXTRACTION: {filters}")
         logger.info("="*80)
 
@@ -103,7 +111,7 @@ class RecommendationEngine:
             results = self.queries.vector_similarity_search(
                 embedding=embedding,
                 filters=filters if filters else None,
-                limit=final_limit
+                limit=search_limit
             )
         except Exception as e:
             logger.error(f"Vector search failed: {str(e)}")
@@ -111,6 +119,11 @@ class RecommendationEngine:
 
         # Rank results (pass prioritize_ratings flag for dynamic weighting)
         ranked_results = self._rank_results(results, prioritize_ratings=prioritize_ratings)
+
+        # For quality-focused queries, we fetched more candidates - now trim to user's requested limit
+        if prioritize_ratings and len(ranked_results) > user_requested_limit:
+            logger.info(f"Trimming {len(ranked_results)} results to top {user_requested_limit} after ranking")
+            ranked_results = ranked_results[:user_requested_limit]
 
         logger.info(f"Returning {len(ranked_results)} recommendations")
         return ranked_results, filters
