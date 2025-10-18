@@ -47,6 +47,10 @@ class RecommendationEngine:
         logger.info(f"Previous filters: {previous_filters}")
         logger.info("="*80)
 
+        # Detect if query is vague/generic (prioritize ratings when no specific intent)
+        is_vague = self._is_vague_query(query)
+        logger.info(f"Vague/generic query detected: {is_vague}")
+
         # Stage 1: Extract structured filters (unless skipped)
         filters = {}
         if not skip_filter_extraction:
@@ -99,11 +103,63 @@ class RecommendationEngine:
             logger.error(f"Vector search failed: {str(e)}")
             raise
 
-        # Rank results
-        ranked_results = self._rank_results(results)
+        # Rank results (pass is_vague flag for dynamic weighting)
+        ranked_results = self._rank_results(results, is_vague=is_vague)
 
         logger.info(f"Returning {len(ranked_results)} recommendations")
         return ranked_results, filters
+
+    def _is_vague_query(self, query: str) -> bool:
+        """
+        Detect if query is vague/generic without specific semantic intent.
+
+        Vague queries lack specificity and should prioritize ratings since
+        semantic similarity is less meaningful.
+
+        Args:
+            query: User query string
+
+        Returns:
+            True if query is vague/generic
+        """
+        query_lower = query.lower().strip()
+
+        # Vague descriptors that don't provide semantic direction
+        vague_terms = ["good", "nice", "great", "best", "some", "any", "something"]
+
+        # Specific attributes that provide clear semantic intent
+        specific_terms = [
+            # Proteins
+            "chicken", "beef", "pork", "fish", "lamb", "turkey", "seafood",
+            # Dietary
+            "vegetarian", "vegan", "gluten", "dairy",
+            # Cuisine
+            "italian", "indian", "chinese", "mexican", "thai", "french", "japanese",
+            # Meal types (explicit)
+            "breakfast", "lunch", "dinner", "dessert", "snack", "appetizer",
+            # Specific dishes
+            "pasta", "pizza", "curry", "soup", "salad", "rice", "stew", "cake",
+            # Cooking methods
+            "grilled", "baked", "fried", "roasted", "steamed",
+            # Time constraints
+            "quick", "fast", "slow", "minutes", "hour",
+            # Difficulty
+            "easy", "simple", "hard", "difficult", "beginner"
+        ]
+
+        # Check if query has vague terms but lacks specific terms
+        has_vague_term = any(term in query_lower for term in vague_terms)
+        has_specific_term = any(term in query_lower for term in specific_terms)
+
+        # Very short queries without specific terms are considered vague
+        word_count = len(query_lower.split())
+
+        # Vague if:
+        # 1. Has vague terms AND no specific terms, OR
+        # 2. Very short (≤3 words) and contains only generic words like "give me recipes"
+        is_vague = (has_vague_term and not has_specific_term) or (word_count <= 4 and not has_specific_term)
+
+        return is_vague
 
     def _merge_filters(self, previous: Dict[str, Any], current: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -143,21 +199,36 @@ class RecommendationEngine:
 
         return merged
 
-    def _rank_results(self, results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _rank_results(self, results: List[Dict[str, Any]], is_vague: bool = False) -> List[Dict[str, Any]]:
         """
         Rank results using weighted scoring with Bayesian average for ratings.
 
         Uses Bayesian average to give more weight to recipes with more reviews.
-        Ranking formula: (similarity * 0.6) + (bayesian_rating * 0.4)
+        Dynamically adjusts weights based on query specificity:
+        - Vague/generic queries: similarity 20%, bayesian_rating 80%
+          (When user asks "give me some good recipes", prioritize highly-rated ones)
+        - Specific queries: similarity 60%, bayesian_rating 40%
+          (When user asks "chicken curry", prioritize semantic match with quality boost)
 
         Args:
             results: List of search results with similarity scores
+            is_vague: Whether the query is vague/generic without specific intent
 
         Returns:
             Sorted list of results with ranking scores
         """
         if not results:
             return []
+
+        # Dynamic weight adjustment based on query specificity
+        if is_vague:
+            similarity_weight = 0.2
+            rating_weight = 0.8
+            logger.info("Vague query - Using rating-prioritized weights: similarity=0.2, rating=0.8")
+        else:
+            similarity_weight = settings.SIMILARITY_WEIGHT
+            rating_weight = settings.RATING_WEIGHT + settings.RATING_COUNT_WEIGHT
+            logger.info(f"Specific query - Using balanced weights: similarity={similarity_weight}, rating={rating_weight}")
 
         # Calculate global average rating and confidence threshold
         # These values help penalize recipes with few reviews
@@ -195,10 +266,10 @@ class RecommendationEngine:
             # Normalize Bayesian rating to 0-1 scale (assuming max rating is 5.0)
             normalized_bayesian_rating = bayesian_rating / 5.0
 
-            # Calculate weighted ranking score
+            # Calculate weighted ranking score using dynamic weights
             rank_score = (
-                similarity_score * settings.SIMILARITY_WEIGHT +
-                normalized_bayesian_rating * (settings.RATING_WEIGHT + settings.RATING_COUNT_WEIGHT)
+                similarity_score * similarity_weight +
+                normalized_bayesian_rating * rating_weight
             )
 
             result["rank_score"] = rank_score
