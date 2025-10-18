@@ -188,6 +188,18 @@ Example 18:
 Query: "vegetarian thai recipes"
 Response: {{"dietary_tags": ["vegetarian"], "cuisine": ["thai"], "tags": ["mains", "soups", "salads"]}}
 
+Example 19:
+Query: "best chicken recipes"
+Response: {{"main_protein": "chicken", "exclude_tags": ["beef", "pork", "lamb", "fish"], "tags": ["mains", "soups", "salads"]}}
+
+Example 20:
+Query: "top rated vegetarian meals"
+Response: {{"dietary_tags": ["vegetarian"], "tags": ["mains", "soups", "salads"]}}
+
+Example 21:
+Query: "give me the most popular beef recipes"
+Response: {{"main_protein": "beef", "exclude_tags": ["chicken", "pork", "lamb", "fish"], "tags": ["mains", "soups", "salads"]}}
+
 Now extract filters for the user query above.
 """
 
