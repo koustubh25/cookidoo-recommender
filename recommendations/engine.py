@@ -65,6 +65,12 @@ class RecommendationEngine:
         else:
             logger.info("Skipping filter extraction (skip_filter_extraction=True)")
 
+        # Add minimum rating filters for quality-focused queries
+        if prioritize_ratings and "min_rating" not in filters:
+            filters["min_rating"] = 4.0
+            filters["min_rating_count"] = 10
+            logger.info(f"Quality-focused query detected - adding min_rating=4.0, min_rating_count=10")
+
         # Merge with previous filters if provided
         if previous_filters:
             logger.info(f"Merging with previous filters: {previous_filters}")

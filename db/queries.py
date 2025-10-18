@@ -102,6 +102,17 @@ class RecipeQueries:
             conditions.append("r.total_time_minutes >= %s")
             params.append(filters["min_time"])
 
+        # Rating constraints (for quality-focused queries)
+        if "min_rating" in filters:
+            conditions.append("r.rating >= %s")
+            params.append(filters["min_rating"])
+            logger.info(f"  Added min_rating filter: >= {filters['min_rating']}")
+
+        if "min_rating_count" in filters:
+            conditions.append("r.rating_count >= %s")
+            params.append(filters["min_rating_count"])
+            logger.info(f"  Added min_rating_count filter: >= {filters['min_rating_count']}")
+
         # Difficulty filter
         if "difficulty" in filters and filters["difficulty"]:
             difficulty_placeholders = ", ".join(["%s"] * len(filters["difficulty"]))
