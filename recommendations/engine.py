@@ -47,9 +47,9 @@ class RecommendationEngine:
         logger.info(f"Previous filters: {previous_filters}")
         logger.info("="*80)
 
-        # Detect if query is vague/generic (prioritize ratings when no specific intent)
-        is_vague = self._is_vague_query(query)
-        logger.info(f"Vague/generic query detected: {is_vague}")
+        # Detect if query should prioritize ratings
+        prioritize_ratings = self._should_prioritize_ratings(query)
+        logger.info(f"Prioritize ratings: {prioritize_ratings}")
 
         # Stage 1: Extract structured filters (unless skipped)
         filters = {}
@@ -103,29 +103,36 @@ class RecommendationEngine:
             logger.error(f"Vector search failed: {str(e)}")
             raise
 
-        # Rank results (pass is_vague flag for dynamic weighting)
-        ranked_results = self._rank_results(results, is_vague=is_vague)
+        # Rank results (pass prioritize_ratings flag for dynamic weighting)
+        ranked_results = self._rank_results(results, prioritize_ratings=prioritize_ratings)
 
         logger.info(f"Returning {len(ranked_results)} recommendations")
         return ranked_results, filters
 
-    def _is_vague_query(self, query: str) -> bool:
+    def _should_prioritize_ratings(self, query: str) -> bool:
         """
-        Detect if query is vague/generic without specific semantic intent.
+        Detect if query should prioritize ratings over semantic similarity.
 
-        Vague queries lack specificity and should prioritize ratings since
-        semantic similarity is less meaningful.
+        Returns True for:
+        1. Quality-focused queries (best, top, highest rated, etc.)
+        2. Vague queries without specific semantic intent
 
         Args:
             query: User query string
 
         Returns:
-            True if query is vague/generic
+            True if ratings should be prioritized
         """
         query_lower = query.lower().strip()
 
-        # Vague descriptors that don't provide semantic direction
-        vague_terms = ["good", "nice", "great", "best", "some", "any", "something"]
+        # Quality-focused keywords that explicitly ask for highly-rated recipes
+        quality_keywords = [
+            "best", "top", "highest rated", "highly rated", "top rated",
+            "most popular", "popular", "favorite", "favourite", "recommend"
+        ]
+
+        # Vague descriptors without quality focus
+        vague_terms = ["good", "nice", "great", "some", "any", "something"]
 
         # Specific attributes that provide clear semantic intent
         specific_terms = [
@@ -147,16 +154,19 @@ class RecommendationEngine:
             "easy", "simple", "hard", "difficult", "beginner"
         ]
 
-        # Check if query has vague terms but lacks specific terms
+        # Check for quality-focused keywords (always prioritize ratings for these)
+        has_quality_keyword = any(keyword in query_lower for keyword in quality_keywords)
+        if has_quality_keyword:
+            return True
+
+        # Check for vague queries without specific terms
         has_vague_term = any(term in query_lower for term in vague_terms)
         has_specific_term = any(term in query_lower for term in specific_terms)
-
-        # Very short queries without specific terms are considered vague
         word_count = len(query_lower.split())
 
         # Vague if:
         # 1. Has vague terms AND no specific terms, OR
-        # 2. Very short (≤3 words) and contains only generic words like "give me recipes"
+        # 2. Very short (≤4 words) and contains only generic words
         is_vague = (has_vague_term and not has_specific_term) or (word_count <= 4 and not has_specific_term)
 
         return is_vague
@@ -199,20 +209,20 @@ class RecommendationEngine:
 
         return merged
 
-    def _rank_results(self, results: List[Dict[str, Any]], is_vague: bool = False) -> List[Dict[str, Any]]:
+    def _rank_results(self, results: List[Dict[str, Any]], prioritize_ratings: bool = False) -> List[Dict[str, Any]]:
         """
         Rank results using weighted scoring with Bayesian average for ratings.
 
         Uses Bayesian average to give more weight to recipes with more reviews.
-        Dynamically adjusts weights based on query specificity:
-        - Vague/generic queries: similarity 20%, bayesian_rating 80%
-          (When user asks "give me some good recipes", prioritize highly-rated ones)
-        - Specific queries: similarity 60%, bayesian_rating 40%
-          (When user asks "chicken curry", prioritize semantic match with quality boost)
+        Dynamically adjusts weights based on query intent:
+        - Quality-focused or vague queries: similarity 20%, bayesian_rating 80%
+          Examples: "best chicken recipes", "give me some good recipes"
+        - Specific semantic queries: similarity 60%, bayesian_rating 40%
+          Examples: "chicken curry", "easy Italian pasta"
 
         Args:
             results: List of search results with similarity scores
-            is_vague: Whether the query is vague/generic without specific intent
+            prioritize_ratings: Whether to prioritize ratings over semantic similarity
 
         Returns:
             Sorted list of results with ranking scores
@@ -220,15 +230,15 @@ class RecommendationEngine:
         if not results:
             return []
 
-        # Dynamic weight adjustment based on query specificity
-        if is_vague:
+        # Dynamic weight adjustment based on query intent
+        if prioritize_ratings:
             similarity_weight = 0.2
             rating_weight = 0.8
-            logger.info("Vague query - Using rating-prioritized weights: similarity=0.2, rating=0.8")
+            logger.info("Prioritizing ratings - Using weights: similarity=0.2, rating=0.8")
         else:
             similarity_weight = settings.SIMILARITY_WEIGHT
             rating_weight = settings.RATING_WEIGHT + settings.RATING_COUNT_WEIGHT
-            logger.info(f"Specific query - Using balanced weights: similarity={similarity_weight}, rating={rating_weight}")
+            logger.info(f"Balanced mode - Using weights: similarity={similarity_weight}, rating={rating_weight}")
 
         # Calculate global average rating and confidence threshold
         # These values help penalize recipes with few reviews
