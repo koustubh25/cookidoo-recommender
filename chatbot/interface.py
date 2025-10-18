@@ -136,14 +136,15 @@ class RecipeChatbot:
             query: User query string
         """
         # Check if this is a refinement of the previous query
-        context = self.session.get_context_for_query(query)
+        context, previous_filters = self.session.get_context_for_query(query)
         enhanced_query = query
 
         if context:
             # Combine previous query with current refinement
             enhanced_query = f"{context} {query}"
-            print(f"\nBot: I'll refine your previous search for '{context}'...")
-            print(f"     Adding constraint: '{query}'")
+            print(f"\nBot: I'll refine your previous search...")
+            print(f"     Previous: '{context}'")
+            print(f"     Adding: '{query}'")
         else:
             # Check for ambiguity only for new queries
             clarification = self.ai_client.detect_ambiguity(query)
@@ -155,17 +156,23 @@ class RecipeChatbot:
         print("\nBot: Searching for recipes...")
 
         try:
-            # Get recommendations with enhanced query
-            results = self.engine.recommend(enhanced_query)
+            # Get recommendations with context-aware filters
+            results, filters = self.engine.recommend(
+                enhanced_query,
+                previous_filters=previous_filters
+            )
 
             if not results:
                 print("\n✗ No recipes found matching your criteria.")
                 print("Try broadening your search or using different keywords.")
                 return
 
-            # Store the enhanced query in session so further refinements build on it
-            # If this was a refinement, store the combined query; otherwise store original
-            self.session.add_query(enhanced_query if context else query, results)
+            # Store the query, results, and merged filters in session
+            self.session.add_query(
+                enhanced_query if context else query,
+                results,
+                filters
+            )
 
             # Display results
             print(f"\nFound {len(results)} recipes:\n")

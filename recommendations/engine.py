@@ -21,8 +21,9 @@ class RecommendationEngine:
         self,
         query: str,
         limit: Optional[int] = None,
-        skip_filter_extraction: bool = False
-    ) -> List[Dict[str, Any]]:
+        skip_filter_extraction: bool = False,
+        previous_filters: Optional[Dict[str, Any]] = None
+    ) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
         """
         Get recipe recommendations for a natural language query.
 
@@ -34,14 +35,16 @@ class RecommendationEngine:
             query: Natural language recipe query
             limit: Maximum number of results
             skip_filter_extraction: If True, skip NL2SQL and use pure vector search
+            previous_filters: Filters from previous query (for context-aware refinement)
 
         Returns:
-            List of ranked recipe dictionaries
+            Tuple of (list of ranked recipe dictionaries, merged filters dict)
         """
         logger.info("="*80)
         logger.info(f"PROCESSING RECOMMENDATION QUERY: '{query}'")
         logger.info(f"Skip filter extraction: {skip_filter_extraction}")
         logger.info(f"Limit parameter: {limit}")
+        logger.info(f"Previous filters: {previous_filters}")
         logger.info("="*80)
 
         # Stage 1: Extract structured filters (unless skipped)
@@ -57,6 +60,13 @@ class RecommendationEngine:
                 filters = {}
         else:
             logger.info("Skipping filter extraction (skip_filter_extraction=True)")
+
+        # Merge with previous filters if provided
+        if previous_filters:
+            logger.info(f"Merging with previous filters: {previous_filters}")
+            merged_filters = self._merge_filters(previous_filters, filters)
+            logger.info(f"✓ Merged filters: {merged_filters}")
+            filters = merged_filters
 
         # Extract result limit from filters if present
         extracted_limit = filters.pop("result_limit", None) if filters else None
@@ -93,13 +103,52 @@ class RecommendationEngine:
         ranked_results = self._rank_results(results)
 
         logger.info(f"Returning {len(ranked_results)} recommendations")
-        return ranked_results
+        return ranked_results, filters
+
+    def _merge_filters(self, previous: Dict[str, Any], current: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Merge previous filters with current filters intelligently.
+
+        Rules:
+        - Current filters override previous for scalar values
+        - List filters (tags, dietary_tags, cuisine) are merged (union)
+        - New main_protein replaces old one and updates exclude_tags
+        - Boolean filters from current override previous
+
+        Args:
+            previous: Previous query filters
+            current: Current query filters
+
+        Returns:
+            Merged filter dictionary
+        """
+        merged = previous.copy()
+
+        # List fields that should be merged (union)
+        list_fields = ["tags", "dietary_tags", "cuisine"]
+
+        for key, value in current.items():
+            if key in list_fields and key in merged:
+                # Merge lists (union without duplicates)
+                merged[key] = list(set(merged[key] + value))
+            elif key == "main_protein":
+                # New protein replaces old one
+                merged[key] = value
+                # Update exclude_tags based on new protein
+                if "exclude_tags" in current:
+                    merged["exclude_tags"] = current["exclude_tags"]
+            else:
+                # For all other fields (including result_limit, max_time, etc.), current overrides
+                merged[key] = value
+
+        return merged
 
     def _rank_results(self, results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
-        Rank results using weighted scoring.
+        Rank results using weighted scoring with Bayesian average for ratings.
 
-        Ranking formula: (similarity * 0.6) + (normalized_rating * 0.3) + (normalized_rating_count * 0.1)
+        Uses Bayesian average to give more weight to recipes with more reviews.
+        Ranking formula: (similarity * 0.6) + (bayesian_rating * 0.4)
 
         Args:
             results: List of search results with similarity scores
@@ -110,27 +159,50 @@ class RecommendationEngine:
         if not results:
             return []
 
-        # Find max values for normalization
-        max_rating = max((r.get("rating") or 0) for r in results)
-        max_rating_count = max((r.get("rating_count") or 0) for r in results)
+        # Calculate global average rating and confidence threshold
+        # These values help penalize recipes with few reviews
+        all_ratings = [(r.get("rating") or 0, r.get("rating_count") or 0) for r in results]
+        total_reviews = sum(count for _, count in all_ratings)
+        if total_reviews > 0:
+            global_avg_rating = sum(rating * count for rating, count in all_ratings) / total_reviews
+        else:
+            global_avg_rating = 3.0  # Default if no ratings
+
+        # Confidence threshold: minimum number of reviews to trust the rating
+        # Use 10th percentile of rating_count as confidence threshold
+        rating_counts = sorted([count for _, count in all_ratings if count > 0])
+        if rating_counts:
+            confidence_threshold = rating_counts[max(0, len(rating_counts) // 10)]
+        else:
+            confidence_threshold = 5  # Default minimum
 
         for result in results:
             similarity_score = result.get("similarity_score", 0)
             rating = result.get("rating") or 0
             rating_count = result.get("rating_count") or 0
 
-            # Normalize rating and rating_count to 0-1 range
-            normalized_rating = rating / max_rating if max_rating > 0 else 0
-            normalized_rating_count = rating_count / max_rating_count if max_rating_count > 0 else 0
+            # Calculate Bayesian average (weighted rating)
+            # Formula: (C * m + R * v) / (C + v)
+            # Where: C = confidence threshold, m = global average, R = recipe rating, v = review count
+            if rating_count > 0:
+                bayesian_rating = (
+                    (confidence_threshold * global_avg_rating + rating * rating_count) /
+                    (confidence_threshold + rating_count)
+                )
+            else:
+                bayesian_rating = global_avg_rating  # No reviews = global average
+
+            # Normalize Bayesian rating to 0-1 scale (assuming max rating is 5.0)
+            normalized_bayesian_rating = bayesian_rating / 5.0
 
             # Calculate weighted ranking score
             rank_score = (
                 similarity_score * settings.SIMILARITY_WEIGHT +
-                normalized_rating * settings.RATING_WEIGHT +
-                normalized_rating_count * settings.RATING_COUNT_WEIGHT
+                normalized_bayesian_rating * (settings.RATING_WEIGHT + settings.RATING_COUNT_WEIGHT)
             )
 
             result["rank_score"] = rank_score
+            result["bayesian_rating"] = bayesian_rating
 
         # Sort by rank score (descending)
         ranked = sorted(results, key=lambda x: x.get("rank_score", 0), reverse=True)
