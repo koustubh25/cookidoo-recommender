@@ -204,7 +204,8 @@ class RecipeQueries:
     def vector_similarity_search(
         embedding: List[float],
         filters: Optional[Dict[str, Any]] = None,
-        limit: int = None
+        limit: int = None,
+        prioritize_ratings: bool = False
     ) -> List[Dict[str, Any]]:
         """
         Perform vector similarity search with optional filters.
@@ -213,6 +214,7 @@ class RecipeQueries:
             embedding: Query embedding vector (768-dimensional)
             filters: Optional filter dictionary
             limit: Maximum number of results (default from settings)
+            prioritize_ratings: If True, order by rating first, then similarity
 
         Returns:
             List of recipe dictionaries with similarity scores
@@ -228,6 +230,15 @@ class RecipeQueries:
 
         # Convert embedding to PostgreSQL vector format
         embedding_str = "[" + ",".join(map(str, embedding)) + "]"
+
+        # For quality-focused queries, order by rating first to surface best recipes
+        # For semantic queries, order by vector similarity
+        if prioritize_ratings:
+            order_clause = "ORDER BY r.recipe_id, r.rating DESC, r.rating_count DESC, r.embedding <-> %s::vector"
+            logger.info("Quality-focused query: Ordering by rating DESC, rating_count DESC, then similarity")
+        else:
+            order_clause = "ORDER BY r.recipe_id, r.embedding <-> %s::vector"
+            logger.info("Semantic query: Ordering by similarity")
 
         query = f"""
             SELECT DISTINCT ON (r.recipe_id)
@@ -257,7 +268,7 @@ class RecipeQueries:
             JOIN recipe_thermomix_versions rtv ON r.recipe_id = rtv.recipe_id
             WHERE {where_clause}
             AND r.embedding IS NOT NULL
-            ORDER BY r.recipe_id, r.embedding <-> %s::vector
+            {order_clause}
             LIMIT %s;
         """
 

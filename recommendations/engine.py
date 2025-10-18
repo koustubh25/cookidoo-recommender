@@ -82,11 +82,13 @@ class RecommendationEngine:
         extracted_limit = filters.pop("result_limit", None) if filters else None
         user_requested_limit = limit or extracted_limit or settings.RESULT_LIMIT
 
-        # For quality-focused queries, fetch more candidates to ensure we get the best ones
-        # We'll fetch 10x the requested amount, then rank and return the top N
+        # For quality-focused queries, fetch MANY more candidates to ensure we get the best ones
+        # Vector similarity alone may not surface the highest-rated recipes
+        # We'll fetch 50x the requested amount (minimum 50), then rank by rating and return top N
         if prioritize_ratings:
-            search_limit = max(user_requested_limit * 10, 20)  # At least 20 candidates
+            search_limit = max(user_requested_limit * 50, 50)  # At least 50 candidates
             logger.info(f"Quality-focused query - expanding search limit from {user_requested_limit} to {search_limit}")
+            logger.info(f"This ensures highly-rated recipes are included even with lower semantic similarity")
         else:
             search_limit = user_requested_limit
 
@@ -107,11 +109,13 @@ class RecommendationEngine:
             raise
 
         # Stage 2: Vector similarity search with filters
+        # Pass prioritize_ratings flag to change database ordering
         try:
             results = self.queries.vector_similarity_search(
                 embedding=embedding,
                 filters=filters if filters else None,
-                limit=search_limit
+                limit=search_limit,
+                prioritize_ratings=prioritize_ratings
             )
         except Exception as e:
             logger.error(f"Vector search failed: {str(e)}")
